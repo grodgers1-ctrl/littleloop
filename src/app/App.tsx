@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getActiveProject } from "../db/repositories";
+import { getSandboxProject, initSandbox } from "../db/sandbox-repositories";
 import { SetupScreen } from "../features/setup/SetupScreen";
 import { HomeScreen } from "../features/home/HomeScreen";
 import { CapturePreviewScreen } from "../features/capture/CapturePreviewScreen";
@@ -7,25 +8,44 @@ import { ImportDateScreen } from "../features/capture/ImportDateScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { ExportScreen } from "../features/export/ExportScreen";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
+import { IntroScreen } from "../features/intro/IntroScreen";
 import { Button } from "../components/Button";
 import { initialRoute, type Route } from "./routes";
 import type { Project } from "../db/schema";
 
+// A project plus a flag indicating whether it's the real or sandbox
+// project. The App shell tracks this so screens can branch on it
+// (sandbox renders the badge, hides the cadence editor, etc.).
+interface ProjectContext {
+  project: Project;
+  kind: "real" | "sandbox";
+}
+
 export default function App() {
   const [route, setRoute] = useState<Route>(initialRoute);
-  const [project, setProject] = useState<Project | null>(null);
+  const [ctx, setCtx] = useState<ProjectContext | null>(null);
   const [loading, setLoading] = useState(true);
 
   const navigate = useCallback((r: Route) => setRoute(r), []);
   const navigateToHome = useCallback(() => setRoute({ name: "home" }), []);
 
-  // Bootstrap: load the project, route to setup or home.
+  // Bootstrap: real project wins if it exists; otherwise fall back to
+  // sandbox; otherwise stay on intro.
   useEffect(() => {
     void (async () => {
-      const p = await getActiveProject();
-      if (p) {
-        setProject(p);
+      const real = await getActiveProject();
+      if (real) {
+        setCtx({ project: real, kind: "real" });
         setRoute({ name: "home" });
+        setLoading(false);
+        return;
+      }
+      const sandbox = await getSandboxProject();
+      if (sandbox) {
+        setCtx({ project: sandbox, kind: "sandbox" });
+        setRoute({ name: "home" });
+        setLoading(false);
+        return;
       }
       setLoading(false);
     })();
@@ -44,21 +64,21 @@ export default function App() {
     );
   }
 
-  // Top-level shell + header. Setup and Home show the brand. Other
-  // screens get a back button.
+  // Top-level shell + header.
   const showBack =
+    route.name !== "intro" &&
     route.name !== "setup" &&
     route.name !== "home" &&
-    Boolean(project);
+    Boolean(ctx);
+  const headerTitle =
+    route.name === "intro" || route.name === "setup"
+      ? "Little Loop"
+      : ctx?.project.childName ?? "Little Loop";
 
   return (
     <div className="ll-app">
       <header className="ll-header">
-        <h1>
-          {route.name === "setup"
-            ? "Little Loop"
-            : project?.childName ?? "Little Loop"}
-        </h1>
+        <h1>{headerTitle}</h1>
         {showBack ? (
           <Button variant="ghost" onClick={navigateToHome}>
             Home
@@ -66,26 +86,36 @@ export default function App() {
         ) : null}
       </header>
 
-      {route.name === "setup" ? (
-        <SetupScreen
-          onComplete={(p) => {
-            setProject(p);
+      {route.name === "intro" ? (
+        <IntroScreen navigate={navigate} />
+      ) : route.name === "setup" ? (
+        route.mode === "sandbox" ? (
+          // Sandbox is meant to be one-tap; initialise the singleton
+          // row and jump straight to home. We render an empty
+          // fragment while the IDB write completes.
+          <SandboxBootstrap onReady={(p) => {
+            setCtx({ project: p, kind: "sandbox" });
             setRoute({ name: "home" });
-          }}
-        />
-      ) : project ? (
-        renderRoute(route, project, navigate, setProject)
+          }} />
+        ) : (
+          <SetupScreen
+            mode="real"
+            onComplete={(p) => {
+              setCtx({ project: p, kind: "real" });
+              setRoute({ name: "home" });
+            }}
+          />
+        )
+      ) : ctx ? (
+        renderRoute(route, ctx, navigate, setCtx)
       ) : (
-        <SetupScreen
-          onComplete={(p) => {
-            setProject(p);
-            setRoute({ name: "home" });
-          }}
-        />
+        // No project anywhere — bounce to the intro so the user can
+        // pick a path.
+        <IntroScreen navigate={navigate} />
       )}
 
-      {/* No persistent hidden inputs at this level. Each screen mounts its
-          own file inputs as needed so they can react to local state. */}
+      {/* No persistent hidden inputs at this level. Each screen mounts
+          its own file inputs as needed so they can react to local state. */}
 
       <footer className="ll-footer">
         Photos stay on this device. No accounts. No uploads.
@@ -94,15 +124,43 @@ export default function App() {
   );
 }
 
+function SandboxBootstrap({ onReady }: { onReady: (p: Project) => void }) {
+  // Bootstrap the sandbox singleton project and immediately hand the
+  // resulting project back to the App. The user never sees a setup
+  // form for the sandbox — the IntroScreen choice is the commitment.
+  useEffect(() => {
+    let cancelled = false;
+    void initSandbox().then((p) => {
+      if (!cancelled) onReady(p);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [onReady]);
+  return (
+    <div className="ll-content">
+      <p>Preparing your sandbox…</p>
+    </div>
+  );
+}
+
 function renderRoute(
   route: Route,
-  project: Project,
+  ctx: ProjectContext,
   navigate: (r: Route) => void,
-  setProject: (p: Project) => void,
+  setCtx: (c: ProjectContext) => void,
 ) {
+  const { project, kind } = ctx;
   switch (route.name) {
     case "home":
-      return <HomeScreen project={project} navigate={navigate} />;
+      return (
+        <HomeScreen
+          project={project}
+          kind={kind}
+          navigate={navigate}
+          onProjectUpdated={(p) => setCtx({ project: p, kind })}
+        />
+      );
     case "capture-preview":
       return (
         <CapturePreviewScreen
@@ -129,6 +187,7 @@ function renderRoute(
       return (
         <TimelineScreen
           project={project}
+          kind={kind}
           navigate={navigate}
         />
       );
@@ -140,8 +199,9 @@ function renderRoute(
       return (
         <SettingsScreen
           project={project}
+          kind={kind}
           navigate={navigate}
-          onProjectUpdated={(p) => setProject(p)}
+          onProjectUpdated={(p) => setCtx({ project: p, kind })}
         />
       );
     case "restore-preview":

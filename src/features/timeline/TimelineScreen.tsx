@@ -18,6 +18,7 @@ import { deleteEntry } from "./entry-service";
 
 interface Props {
   project: Project;
+  kind: "real" | "sandbox";
   navigate: (r: Route) => void;
 }
 
@@ -26,7 +27,9 @@ interface Row {
   thumbUrl: string | null;
 }
 
-export function TimelineScreen({ project, navigate }: Props) {
+export function TimelineScreen({ project, kind, navigate }: Props) {
+  // `kind` is consumed in Phase 4 (timeline-specific sandbox badges).
+  void kind;
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<Entry | null>(null);

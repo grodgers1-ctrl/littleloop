@@ -16,12 +16,18 @@ import type { Route } from "../../app/routes";
 
 interface Props {
   project: Project;
+  kind: "real" | "sandbox";
   navigate: (r: Route) => void;
+  onProjectUpdated?: (p: Project) => void;
 }
 
 type CaptureSource = "camera" | "library";
 
-export function HomeScreen({ project, navigate }: Props) {
+export function HomeScreen({ project, kind, navigate, onProjectUpdated }: Props) {
+  // `kind` is consumed in Phase 4 (sandbox badge + CTAs). For now we
+  // destructure it so the App-level contract is in place.
+  void kind;
+  void onProjectUpdated;
   const [hasCurrentPeriod, setHasCurrentPeriod] = useState(false);
   const [count, setCount] = useState(0);
   const [lowSpace, setLowSpace] = useState(false);

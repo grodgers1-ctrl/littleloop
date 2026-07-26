@@ -2,6 +2,7 @@
 // V1 does not need a routing library; one screen at a time is enough.
 
 export type Screen =
+  | "intro"
   | "setup"
   | "home"
   | "capture-preview"
@@ -14,7 +15,8 @@ export type Screen =
   | "restore-preview";
 
 export type Route =
-  | { name: "setup" }
+  | { name: "intro" }
+  | { name: "setup"; mode: "real" | "sandbox" }
   | { name: "home" }
   | {
       name: "capture-preview";
@@ -32,4 +34,4 @@ export type Route =
   | { name: "settings" }
   | { name: "restore-preview"; projectName: string; cadence: string; count: number };
 
-export const initialRoute: Route = { name: "setup" };
+export const initialRoute: Route = { name: "intro" };

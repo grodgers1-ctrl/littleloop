@@ -27,6 +27,7 @@ import {
 
 interface Props {
   project: Project;
+  kind: "real" | "sandbox";
   navigate: (r: Route) => void;
   onProjectUpdated: (p: Project) => void;
 }
@@ -35,9 +36,12 @@ const APP_VERSION = "1.0.0";
 
 export function SettingsScreen({
   project,
+  kind,
   navigate,
   onProjectUpdated,
 }: Props) {
+  // `kind` is consumed in Phase 5 (sandbox card).
+  void kind;
   const [childName, setChildName] = useState(project.childName);
   const [dob, setDob] = useState(project.dateOfBirth);
   const [cadence, setCadence] = useState(project.cadence);
@@ -128,7 +132,7 @@ export function SettingsScreen({
   async function handleDeleteAll() {
     await deleteAllProjectData(project.id);
     setConfirmDelete(false);
-    navigate({ name: "setup" });
+    navigate({ name: "setup", mode: "real" });
   }
 
   return (

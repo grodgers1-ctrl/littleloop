@@ -8,13 +8,15 @@ import {
 import { createProject } from "../../db/repositories";
 import { requestPersistentStorage } from "../../lib/storage";
 import type { Cadence, Project } from "../../db/schema";
-import { todayDateOnly, parseDateOnly } from "../../lib/dates";
+import { todayDateOnly } from "../../lib/dates";
+import { initSandbox } from "../../db/sandbox-repositories";
 
 interface Props {
+  mode: "real" | "sandbox";
   onComplete: (project: Project) => void;
 }
 
-export function SetupScreen({ onComplete }: Props) {
+export function SetupScreen({ mode, onComplete }: Props) {
   const [childName, setChildName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState(
     // sensible default: 6 months ago today
@@ -28,6 +30,15 @@ export function SetupScreen({ onComplete }: Props) {
   const [errors, setErrors] = useState<SetupValidation>({});
   const [busy, setBusy] = useState(false);
 
+  // Sandbox setup needs no form. Initialise the singleton project and
+  // bounce to home immediately. Mounting this component in sandbox
+  // mode is unusual (the intro screen usually goes straight to home
+  // for sandbox), but we still render a tiny placeholder so any deep
+  // link into setup?mode=sandbox doesn't crash.
+  if (mode === "sandbox") {
+    return <SandboxSetup onComplete={onComplete} />;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const v = validateSetup({ childName, dateOfBirth });
@@ -37,9 +48,7 @@ export function SetupScreen({ onComplete }: Props) {
     try {
       const project = await createProject({
         childName,
-        dateOfBirth: parseDateOnly(dateOfBirth)
-          ? dateOfBirth
-          : dateOfBirth, // validated above
+        dateOfBirth,
         cadence,
       });
       // Don't block setup on storage persist.
@@ -138,6 +147,22 @@ export function SetupScreen({ onComplete }: Props) {
         Your timeline is stored on this device. Back it up regularly so it can
         be restored if the device is lost or the browser data is cleared.
       </div>
+    </div>
+  );
+}
+
+function SandboxSetup({ onComplete }: { onComplete: (p: Project) => void }) {
+  // We mount this only briefly while the singleton row is being written.
+  // In practice the IntroScreen skips setup entirely for sandbox and
+  // goes straight home; this component exists so a manual deep link
+  // to setup?mode=sandbox still works.
+  const [busy, setBusy] = useState(true);
+  void initSandbox()
+    .then((p) => onComplete(p))
+    .catch(() => setBusy(false));
+  return (
+    <div className="ll-content">
+      <p>{busy ? "Preparing your sandbox…" : "Sandbox ready."}</p>
     </div>
   );
 }

@@ -71,11 +71,17 @@ async function main() {
     else totalFail += 1;
   };
 
-  // --- Step 1: Setup ---------------------------------------------------
-  console.log("[1] Setup form");
+  // --- Step 1: Intro → Setup ------------------------------------------
+  console.log("[1] Intro + Setup form");
   await page.goto(PREVIEW_URL, { waitUntil: "networkidle" });
   const titleOk = await page.title() === "Little Loop";
   tally(ok("page title is 'Little Loop'", titleOk, await page.title()));
+  // Intro screen renders first on a fresh visit. Click "Start a real
+  // timeline" to reach the setup form.
+  const introOk = await page.getByRole("heading", { name: "Little Loop" }).first().isVisible();
+  tally(ok("intro screen renders", introOk));
+  await page.getByRole("button", { name: /Start a real timeline/ }).click();
+  await page.waitForSelector('h1:has-text("Welcome to Little Loop")', { timeout: 3000 });
   const headingOk = await page.getByRole("heading", { name: /Welcome to Little Loop/ }).isVisible();
   tally(ok("setup heading visible", headingOk));
 
@@ -103,8 +109,10 @@ async function main() {
   // land on home, NOT setup.
   const stillOnHome = await page.getByRole("heading", { name: "Ada" }).first().isVisible();
   tally(ok("reload preserves project (still home)", stillOnHome));
-  const noSetupAfterReload = !(await page.getByText(/Welcome to Little Loop/).isVisible().catch(() => false));
-  tally(ok("reload does NOT return to setup", noSetupAfterReload));
+  // After a reload with an existing project we should land on home,
+  // NOT on the intro screen.
+  const noIntroAfterReload = !(await page.getByRole("button", { name: /Start a real timeline/ }).isVisible().catch(() => false));
+  tally(ok("reload does NOT return to intro", noIntroAfterReload));
 
   // --- Step 3: Import library photos (3 real PNGs) ---------------------
   // Daily cadence means one photo per date — to exercise multi-entry
@@ -404,11 +412,13 @@ async function main() {
   });
   await page.waitForTimeout(200);
   await page.reload({ waitUntil: "networkidle" });
-  // Should now be back at setup.
-  const backAtSetup = await page.getByText(/Welcome to Little Loop/).isVisible();
-  tally(ok("after wipe + reload → setup", backAtSetup));
+  // Should now be back at the intro (no real project, no sandbox).
+  const backAtIntro = await page.getByRole("button", { name: /Start a real timeline/ }).isVisible();
+  tally(ok("after wipe + reload → intro", backAtIntro));
 
-  // Restore the backup.
+  // Create a new project so we have somewhere to restore into.
+  await page.getByRole("button", { name: /Start a real timeline/ }).click();
+  await page.waitForSelector('h1:has-text("Welcome to Little Loop")', { timeout: 3000 });
   await page.getByLabel(/Child's name/).fill("Temp");
   await page.getByRole('button', { name: /Create timeline/ }).click();
   await page.waitForTimeout(300);
