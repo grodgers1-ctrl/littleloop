@@ -23,6 +23,8 @@ Thumbs.db
 # Test / coverage
 coverage/
 .vitest-cache/
+.e2e-output/
+.test-photos/
 
 # Env
 .env

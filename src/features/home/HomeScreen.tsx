@@ -145,8 +145,21 @@ export function HomeScreen({ project, navigate }: Props) {
                   >
                     Export flipbook
                   </Button>
+                  <Button
+                    block
+                    onClick={() => navigate({ name: "settings" })}
+                  >
+                    Settings
+                  </Button>
                 </>
-              ) : null}
+              ) : (
+                <Button
+                  block
+                  onClick={() => navigate({ name: "settings" })}
+                >
+                  Settings
+                </Button>
+              )}
             </>
           )}
         </div>

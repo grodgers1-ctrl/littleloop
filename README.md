@@ -172,6 +172,7 @@ A failed export does not modify the source timeline.
 | `npm run test:watch` | Vitest watch mode |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run smoke` | Build then start a preview server and curl the PWA artifacts |
+| `npm run e2e` | Run the Playwright end-to-end test against the preview server (requires `npx playwright install chromium` first) |
 
 ## Testing
 
@@ -195,6 +196,14 @@ The test suite covers the pure logic and persistence layers:
   successful restore reproduces project + entries.
 - `tests/unit/export-renderer.test.ts` — letterbox math for landscape and
   portrait inputs, per-speed frame counts.
+- `tests/e2e/preview.spec.mjs` — Playwright end-to-end test that drives
+  the production preview server with a real Chromium browser against
+  real PNG screenshots from `C:\Users\Admin\Pictures\Screenshots`. It
+  exercises setup, validation, reload persistence, library import with
+  date assignment, image normalization (asserts stored JPEG dimensions
+  via SOF-marker parsing), the timeline view, replace, delete, backup
+  export, wipe → reload → setup, restore, failed-restore preservation,
+  settings, and storage estimate.
 
 End-to-end MP4 rendering, real camera capture, and HEIC decoding are
 **not** exercised by automated tests in this environment (see
