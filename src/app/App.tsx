@@ -3,9 +3,11 @@ import { getActiveProject } from "../db/repositories";
 import { getSandboxProject, initSandbox } from "../db/sandbox-repositories";
 import { SetupScreen } from "../features/setup/SetupScreen";
 import { HomeScreen } from "../features/home/HomeScreen";
+import { SandboxHomeScreen } from "../features/sandbox/SandboxHomeScreen";
 import { CapturePreviewScreen } from "../features/capture/CapturePreviewScreen";
 import { ImportDateScreen } from "../features/capture/ImportDateScreen";
 import { TimelineScreen } from "../features/timeline/TimelineScreen";
+import { SandboxTimelineScreen } from "../features/sandbox/SandboxTimelineScreen";
 import { ExportScreen } from "../features/export/ExportScreen";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
 import { IntroScreen } from "../features/intro/IntroScreen";
@@ -153,7 +155,9 @@ function renderRoute(
   const { project, kind } = ctx;
   switch (route.name) {
     case "home":
-      return (
+      return kind === "sandbox" ? (
+        <SandboxHomeScreen project={project} navigate={navigate} />
+      ) : (
         <HomeScreen
           project={project}
           kind={kind}
@@ -184,7 +188,9 @@ function renderRoute(
         />
       );
     case "timeline":
-      return (
+      return kind === "sandbox" ? (
+        <SandboxTimelineScreen project={project} navigate={navigate} />
+      ) : (
         <TimelineScreen
           project={project}
           kind={kind}
