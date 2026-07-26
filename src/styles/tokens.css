@@ -1,0 +1,35 @@
+/* Design tokens for Little Loop.
+   Warm, neutral, keepsake feel. Soft rounded cards, high-contrast text,
+   large touch targets. No social-media cues. */
+
+:root {
+  /* Warm neutral palette */
+  --ll-bg: #fbf7f1;
+  --ll-surface: #ffffff;
+  --ll-surface-2: #f4ece1;
+  --ll-border: #e8dccb;
+  --ll-text: #2b2a26;
+  --ll-text-soft: #6a655c;
+  --ll-text-faint: #9b9488;
+  --ll-accent: #8a5a3b; /* warm sienna */
+  --ll-accent-strong: #6f4528;
+  --ll-danger: #b03a2e;
+  --ll-success: #4a7c59;
+  --ll-warn: #c08a2e;
+
+  /* Sizing */
+  --ll-radius-sm: 8px;
+  --ll-radius: 14px;
+  --ll-radius-lg: 22px;
+  --ll-touch: 48px;
+
+  /* Shadows */
+  --ll-shadow-sm: 0 1px 2px rgba(43, 42, 38, 0.06);
+  --ll-shadow: 0 4px 18px rgba(43, 42, 38, 0.08);
+
+  /* Typography */
+  --ll-font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+  --ll-font-serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+}
