@@ -10,6 +10,7 @@ import { TimelineScreen } from "../features/timeline/TimelineScreen";
 import { SandboxTimelineScreen } from "../features/sandbox/SandboxTimelineScreen";
 import { ExportScreen } from "../features/export/ExportScreen";
 import { SettingsScreen } from "../features/settings/SettingsScreen";
+import { SandboxSettingsScreen } from "../features/sandbox/SandboxSettingsScreen";
 import { IntroScreen } from "../features/intro/IntroScreen";
 import { Button } from "../components/Button";
 import { initialRoute, type Route } from "./routes";
@@ -202,7 +203,12 @@ function renderRoute(
     case "export-complete":
       return <ExportScreen project={project} navigate={navigate} />;
     case "settings":
-      return (
+      return kind === "sandbox" ? (
+        <SandboxSettingsScreen
+          project={project}
+          navigate={navigate}
+        />
+      ) : (
         <SettingsScreen
           project={project}
           kind={kind}
