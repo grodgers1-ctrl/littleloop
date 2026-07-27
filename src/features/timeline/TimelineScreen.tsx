@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { Modal } from "../../components/Modal";
@@ -14,6 +14,7 @@ import {
   formatWeekLabel,
   weeklyPeriodKey,
 } from "../../lib/dates";
+import { useObjectUrls } from "../../lib/use-object-urls";
 import { deleteEntry } from "./entry-service";
 
 interface Props {
@@ -22,49 +23,39 @@ interface Props {
   navigate: (r: Route) => void;
 }
 
-interface Row {
-  entry: Entry;
-  thumbUrl: string | null;
-}
-
 export function TimelineScreen({ project, kind, navigate }: Props) {
   // `kind` is consumed in Phase 4 (timeline-specific sandbox badges).
   void kind;
-  const [rows, setRows] = useState<Row[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [thumbBlobs, setThumbBlobs] = useState<
+    Array<{ id: string; blob: Blob | null }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<Entry | null>(null);
   const [pendingReplace, setPendingReplace] = useState<Entry | null>(null);
 
-  async function reload() {
+  // The hook handles createObjectURL / revokeObjectURL for us; we
+  // hand it a stable list of {id, blob} pairs and it gives us back
+  // URLs in the same order.
+  const { urls: rows } = useObjectUrls(thumbBlobs);
+
+  const reload = useCallback(async () => {
     setLoading(true);
-    const entries = await listEntries(project.id);
-    // Resolve thumbnail URLs.
+    const list = await listEntries(project.id);
+    setEntries(list);
     const db = getDb();
-    const out: Row[] = [];
-    for (const e of entries) {
+    const blobs: Array<{ id: string; blob: Blob | null }> = [];
+    for (const e of list) {
       const asset = await db.assets.get(e.thumbnailBlobId);
-      out.push({
-        entry: e,
-        thumbUrl: asset ? URL.createObjectURL(asset.blob) : null,
-      });
+      blobs.push({ id: e.id, blob: asset ? asset.blob : null });
     }
-    setRows(out);
+    setThumbBlobs(blobs);
     setLoading(false);
-  }
+  }, [project.id]);
 
   useEffect(() => {
     void reload();
-    return () => {
-      // Revoke any object URLs on unmount.
-      rows.forEach((r) => {
-        if (r.thumbUrl) URL.revokeObjectURL(r.thumbUrl);
-      });
-    };
-    // We deliberately don't depend on `rows` — we only want to reload
-    // when the project changes. Including `rows` would cause an infinite
-    // loop because reload() updates rows.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.id]);
+  }, [reload]);
 
   async function handleDelete(entry: Entry) {
     await deleteEntry(entry.id);
@@ -96,6 +87,10 @@ export function TimelineScreen({ project, kind, navigate }: Props) {
     setPendingReplace(null);
   }
 
+  // Index URLs by entry id for quick lookup in render.
+  const urlById = new Map<string, string | null>();
+  for (const r of rows) urlById.set(r.id, r.url);
+
   if (loading) {
     return (
       <div className="ll-content">
@@ -104,7 +99,7 @@ export function TimelineScreen({ project, kind, navigate }: Props) {
     );
   }
 
-  if (rows.length === 0) {
+  if (entries.length === 0) {
     return (
       <div className="ll-content">
         <EmptyState
@@ -119,9 +114,10 @@ export function TimelineScreen({ project, kind, navigate }: Props) {
     <div className="ll-content ll-stack">
       <h2>Timeline</h2>
       <div className="ll-timeline">
-        {rows.map(({ entry, thumbUrl }) => {
+        {entries.map((entry) => {
           const age = ageAt(entry.capturedDate, project.dateOfBirth);
           const isWeekly = project.cadence === "weekly";
+          const thumbUrl = urlById.get(entry.id) ?? null;
           return (
             <div className="ll-timeline-entry" key={entry.id}>
               {thumbUrl ? (

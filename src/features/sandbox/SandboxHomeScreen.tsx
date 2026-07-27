@@ -17,16 +17,10 @@ import {
 import { renderSandboxPreview } from "./sandbox-preview";
 import { downloadBlob } from "../../lib/download";
 import type { Route } from "../../app/routes";
-import type { Entry } from "../../db/schema";
 
 interface Props {
   project: Project;
   navigate: (r: Route) => void;
-}
-
-interface Row {
-  entry: Entry;
-  thumbUrl: string | null;
 }
 
 type BusyState =
@@ -35,34 +29,16 @@ type BusyState =
   | { kind: "error"; message: string };
 
 export function SandboxHomeScreen({ project, navigate }: Props) {
-  const [rows, setRows] = useState<Row[]>([]);
   const [count, setCount] = useState(0);
   const [busy, setBusy] = useState<BusyState>({ kind: "idle" });
 
   async function reload() {
     const all = await listSandboxEntries();
-    const out: Row[] = [];
-    for (const e of all) {
-      // Sandbox thumbnails are fetched directly from the sandbox DB.
-      const { getSandboxDb } = await import("../../db/sandbox-database");
-      const asset = await getSandboxDb().assets.get(e.thumbnailBlobId);
-      out.push({
-        entry: e,
-        thumbUrl: asset ? URL.createObjectURL(asset.blob) : null,
-      });
-    }
-    setRows(out);
     setCount(all.length);
   }
 
   useEffect(() => {
     void reload();
-    return () => {
-      rows.forEach((r) => {
-        if (r.thumbUrl) URL.revokeObjectURL(r.thumbUrl);
-      });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on mount only
   }, [project.id]);
 
   async function handleFiles(files: FileList | File[]) {

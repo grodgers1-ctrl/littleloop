@@ -1,52 +1,47 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
-import type { Project } from "../../db/schema";
+import type { Entry, Project } from "../../db/schema";
 import { listSandboxEntries } from "../../db/sandbox-repositories";
 import { getSandboxDb } from "../../db/sandbox-database";
 import { formatDateLong, formatAge, ageAt } from "../../lib/dates";
+import { useObjectUrls } from "../../lib/use-object-urls";
 import type { Route } from "../../app/routes";
-import type { Entry } from "../../db/schema";
 
 interface Props {
   project: Project;
   navigate: (r: Route) => void;
 }
 
-interface Row {
-  entry: Entry;
-  thumbUrl: string | null;
-}
-
 export function SandboxTimelineScreen({ project, navigate }: Props) {
-  const [rows, setRows] = useState<Row[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [thumbBlobs, setThumbBlobs] = useState<
+    Array<{ id: string; blob: Blob | null }>
+  >([]);
   const [loading, setLoading] = useState(true);
+
+  const { urls: rows } = useObjectUrls(thumbBlobs);
 
   async function reload() {
     setLoading(true);
     const all = await listSandboxEntries();
+    setEntries(all);
     const db = getSandboxDb();
-    const out: Row[] = [];
+    const blobs: Array<{ id: string; blob: Blob | null }> = [];
     for (const e of all) {
       const asset = await db.assets.get(e.thumbnailBlobId);
-      out.push({
-        entry: e,
-        thumbUrl: asset ? URL.createObjectURL(asset.blob) : null,
-      });
+      blobs.push({ id: e.id, blob: asset ? asset.blob : null });
     }
-    setRows(out);
+    setThumbBlobs(blobs);
     setLoading(false);
   }
 
   useEffect(() => {
     void reload();
-    return () => {
-      rows.forEach((r) => {
-        if (r.thumbUrl) URL.revokeObjectURL(r.thumbUrl);
-      });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
+
+  const urlById = new Map<string, string | null>();
+  for (const r of rows) urlById.set(r.id, r.url);
 
   if (loading) {
     return (
@@ -56,7 +51,7 @@ export function SandboxTimelineScreen({ project, navigate }: Props) {
     );
   }
 
-  if (rows.length === 0) {
+  if (entries.length === 0) {
     return (
       <div className="ll-content">
         <EmptyState
@@ -71,8 +66,9 @@ export function SandboxTimelineScreen({ project, navigate }: Props) {
     <div className="ll-content ll-stack">
       <h2>Sandbox timeline</h2>
       <div className="ll-timeline">
-        {rows.map(({ entry, thumbUrl }) => {
+        {entries.map((entry) => {
           const age = ageAt(entry.capturedDate, project.dateOfBirth);
+          const thumbUrl = urlById.get(entry.id) ?? null;
           return (
             <div className="ll-timeline-entry" key={entry.id}>
               {thumbUrl ? (
