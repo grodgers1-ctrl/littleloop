@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "smoke": "node scripts/smoke.mjs",
-    "e2e": "node tests/e2e/preview.spec.mjs"
+    "e2e": "node tests/e2e/preview.spec.mjs",
+    "postinstall": "node scripts/patch-ffmpeg-classic-worker.mjs"
   },
   "dependencies": {
     "@eslint/js": "^9.17.0",

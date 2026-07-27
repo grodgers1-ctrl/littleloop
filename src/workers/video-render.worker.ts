@@ -109,22 +109,23 @@ async function getFfmpeg(
     // Per-frame progress is reported by the orchestrator based on
     // completed frame writes, not FFmpeg's internal progress.
   });
-  // Load the single-threaded core from the SAME ORIGIN as the page.
-  // We previously fetched from unpkg.com but iOS Safari 26.5 fails
-  // the worker's importScripts for cross-origin URLs even when
-  // unpkg sends the right CORS / CORP headers. Self-hosting the
-  // core from /ffmpeg-core/ (served by the same Vercel deploy as
-  // the app) avoids the cross-origin importScripts restriction.
-  //
-  // The init message can still override via coreURL/wasmURL for
-  // tests pointing at a local mock.
-  const baseURL = coreURL
-    ? coreURL.replace(/\/[^/]*$/, "")
-    : "/ffmpeg-core";
-  await ffmpeg.load({
-    coreURL: coreURL ?? `${baseURL}/ffmpeg-core.js`,
-    wasmURL: wasmURL ?? `${baseURL}/ffmpeg-core.wasm`,
-  });
+  // Load the single-threaded core from the SAME ORIGIN as the page,
+    // and use our own classic-worker shim (not the FFmpeg library's
+    // default module worker). The library's default worker uses ESM
+    // imports which force a module worker, and module workers can't
+    // call importScripts — which is what was failing on iOS Safari
+    // 26.5. The shim is /ffmpeg-core/ffmpeg-classic-worker.js.
+    //
+    // The init message can still override via coreURL/wasmURL for
+    // tests pointing at a local mock.
+    const baseURL = coreURL
+      ? coreURL.replace(/\/[^/]*$/, "")
+      : "/ffmpeg-core";
+    await ffmpeg.load({
+      coreURL: coreURL ?? `${baseURL}/ffmpeg-core.js`,
+      wasmURL: wasmURL ?? `${baseURL}/ffmpeg-core.wasm`,
+      classWorkerURL: "/ffmpeg-core/ffmpeg-classic-worker.js",
+    });
   _ffmpeg = ffmpeg;
   return ffmpeg;
 }

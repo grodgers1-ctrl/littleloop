@@ -83,8 +83,9 @@ function drawFrame(
 }
 
 // Convert the canvas contents to a PNG Uint8Array. Uses canvas.toBlob
-// (available everywhere; iOS Safari 16 included). Returns a fresh
-// Uint8Array so the caller can transfer the underlying buffer.
+// (available everywhere; iOS Safari 16 included). Each call returns
+// a fresh ArrayBuffer, which lets us transfer it without detaching
+// a buffer we still need.
 function canvasToPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -98,6 +99,35 @@ function canvasToPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
         .catch(reject);
     }, "image/png");
   });
+}
+
+// describeError: produce a single diagnostic string from any thrown
+// value. The previous fallback to the literal "Render failed" string
+// hid empty-message rejections (notably some FFmpeg.wasm internal
+// errors on iOS Safari). Concatenating every useful property gives
+// the user (and our remote debugging) the real cause.
+function describeError(err: unknown): string {
+  if (err instanceof Error) {
+    const parts: string[] = [];
+    if (err.name && err.name !== "Error") parts.push(`[${err.name}]`);
+    if (err.message) parts.push(err.message);
+    if (err.stack) parts.push(`(${err.stack.split("\n")[0]})`);
+    if (parts.length === 0) {
+      try {
+        parts.push(`unknown Error: ${JSON.stringify(err)}`);
+      } catch {
+        parts.push("unknown Error (not serializable)");
+      }
+    }
+    return parts.join(" ");
+  }
+  if (typeof err === "string") return err;
+  if (err === null || err === undefined) return "Unknown error (no details)";
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
 }
 
 // Run an export end-to-end. Main thread renders frames on a regular
@@ -118,8 +148,8 @@ export async function runExport(
   const total = request.entries.length * framesPerImage;
 
   // Build the host canvas. We use a real <canvas> (NOT OffscreenCanvas)
-  // so this works on every browser including iOS Safari 16.0 which has
-  // no OffscreenCanvas at all.
+  // so this works on every browser including iOS Safari 16.0 which
+  // has no OffscreenCanvas at all.
   const host = document.createElement("canvas");
   host.width = FRAME_W;
   host.height = FRAME_H;
@@ -170,7 +200,8 @@ export async function runExport(
 
   // For each source entry: decode to ImageBitmap on main thread,
   // draw + PNG-encode N times (one per output frame), and post each
-  // PNG to the worker.
+  // PNG to the worker. canvasToPng produces a fresh ArrayBuffer per
+  // call, so transferring each one is safe.
   for (let idx = 0; idx < request.entries.length; idx += 1) {
     const src = await getImage(idx);
     if (!src) {
@@ -203,35 +234,6 @@ export async function runExport(
     "success",
   );
   return { blob: success.blob, filename: success.filename };
-}
-
-// describeError: produce a single diagnostic string from any thrown
-// value. The previous fallback to the literal "Render failed" string
-// hid empty-message rejections (notably some FFmpeg.wasm internal
-// errors on iOS Safari). Concatenating every useful property gives
-// the user (and our remote debugging) the real cause.
-export function describeError(err: unknown): string {
-  if (err instanceof Error) {
-    const parts: string[] = [];
-    if (err.name && err.name !== "Error") parts.push(`[${err.name}]`);
-    if (err.message) parts.push(err.message);
-    if (err.stack) parts.push(`(${err.stack.split("\n")[0]})`);
-    if (parts.length === 0) {
-      try {
-        parts.push(`unknown Error: ${JSON.stringify(err)}`);
-      } catch {
-        parts.push("unknown Error (not serializable)");
-      }
-    }
-    return parts.join(" ");
-  }
-  if (typeof err === "string") return err;
-  if (err === null || err === undefined) return "Unknown error (no details)";
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return String(err);
-  }
 }
 
 export function startExport(
