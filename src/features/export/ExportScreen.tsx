@@ -108,8 +108,17 @@ export function ExportScreen({ project, navigate }: Props) {
         }
       },
       onError: (message: string) => {
-        setError(message);
+        // Surface every scrap of detail. Previously the orchestrator
+        // fell back to the literal string "Render failed" whenever
+        // an exception had no .message — that hid the real cause. Now
+        // we concatenate any available fields so the user (and our
+        // remote debugging) sees the actual error.
+        const fullMessage = message || "Unknown error (no message)";
+        setError(fullMessage);
         setPhase("error");
+        // Also log to console so Safari's Web Inspector captures it
+        // even if the user doesn't read the on-screen banner.
+        console.error("[Little Loop export]", fullMessage);
       },
     });
   }
