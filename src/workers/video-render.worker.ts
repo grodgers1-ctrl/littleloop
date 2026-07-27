@@ -1,23 +1,20 @@
-// MP4 export encoding. Runs inside a Web Worker so the UI thread stays
-// responsive. Uses @ffmpeg/ffmpeg (single-threaded core) loaded lazily
-// from a public CDN so it doesn't bloat the main JS bundle.
+// MP4 export encoding. Runs inside a Web Worker so the UI thread
+// stays responsive. Uses @ffmpeg/ffmpeg (single-threaded core)
+// loaded from /ffmpeg-core/ on the same origin.
 //
-// Worker protocol (v3 — main-thread canvas, worker handles FFmpeg only).
-// Works on every browser including iOS Safari 16.0 (which has no
-// OffscreenCanvas / transferControlToOffscreen):
+// Worker protocol (main-thread canvas, worker handles FFmpeg):
 //
 //   in  : { type: "init", total, framesPerImage, coreURL?, wasmURL? }
 //         — configures the worker and eagerly loads FFmpeg so any
 //         CDN error surfaces here with a clear message.
 //
 //   in  : { type: "frame", idx, frameIdx, png }
-//         — a single PNG-encoded frame to write to FFmpeg's virtual
-//         FS. The main thread has already rendered and PNG-encoded
-//         it on a regular <canvas>. The png bytes are transferred
-//         for zero-copy.
+//         — a single PNG-encoded frame. The main thread has
+//         already rendered and PNG-encoded it on a regular
+//         <canvas>. The png bytes are transferred for zero-copy.
 //
 //   in  : { type: "encode", filename }
-//         — runs the concat command, produces out.mp4, posts
+//         — encodes the assembled frames into out.mp4 and posts
 //         { type: "success", blob, filename }.
 //
 //   out : { type: "ready" }
@@ -65,7 +62,6 @@ export type WorkerOut =
 const FRAME_W = 720;
 const FRAME_H = 1280;
 const FPS = 30;
-const BG_COLOR = "#fbf2e6"; // warm neutral, matches UI
 
 // 9:16 letterbox math: fit image into frame preserving aspect ratio.
 export function letterboxFit(srcW: number, srcH: number): {
@@ -85,14 +81,42 @@ export function letterboxFit(srcW: number, srcH: number): {
 
 // Per-speed helpers. Speed 0.8 = 0.8s/frame; 0.25 = 0.25s/frame.
 export function frameCountForSpeed(speed: RenderSpeed): number {
-  // Each frame in the output stream is one source image shown for speed
-  // seconds. We render speed*FPS frames per source image so transitions
-  // appear smooth at standard playback.
+  // Each frame in the output stream is one source image shown for
+  // speed seconds. We render speed*FPS frames per source image so
+  // transitions appear smooth at standard playback.
   return Math.max(1, Math.round(speed * FPS));
 }
 
 export function totalFrames(entries: RenderEntry[], speed: RenderSpeed): number {
   return entries.length * frameCountForSpeed(speed);
+}
+
+// describeError: produce a single diagnostic string from any thrown
+// value. The previous fallback to the literal "Render failed" string
+// hid empty-message rejections. Concatenating every useful property
+// gives the user (and our remote debugging) the real cause.
+function describeError(err: unknown): string {
+  if (err instanceof Error) {
+    const parts: string[] = [];
+    if (err.name && err.name !== "Error") parts.push(`[${err.name}]`);
+    if (err.message) parts.push(err.message);
+    if (err.stack) parts.push(`(${err.stack.split("\n")[0]})`);
+    if (parts.length === 0) {
+      try {
+        parts.push(`unknown Error: ${JSON.stringify(err)}`);
+      } catch {
+        parts.push("unknown Error (not serializable)");
+      }
+    }
+    return parts.join(" ");
+  }
+  if (typeof err === "string") return err;
+  if (err === null || err === undefined) return "Unknown error (no details)";
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
 }
 
 let _ffmpeg: FFmpeg | null = null;
@@ -110,28 +134,20 @@ async function getFfmpeg(
     // completed frame writes, not FFmpeg's internal progress.
   });
   // Load the single-threaded core from the SAME ORIGIN as the page,
-    // and use our own classic-worker shim (not the FFmpeg library's
-    // default module worker). The library's default worker uses ESM
-    // imports which force a module worker, and module workers can't
-    // call importScripts — which is what was failing on iOS Safari
-    // 26.5. The shim is /ffmpeg-core/ffmpeg-classic-worker.js.
-    //
-    // The init message can still override via coreURL/wasmURL for
-    // tests pointing at a local mock.
-    const baseURL = coreURL
-      ? coreURL.replace(/\/[^/]*$/, "")
-      : "/ffmpeg-core";
-    await ffmpeg.load({
-      coreURL: coreURL ?? `${baseURL}/ffmpeg-core.js`,
-      wasmURL: wasmURL ?? `${baseURL}/ffmpeg-core.wasm`,
-      classWorkerURL: "/ffmpeg-core/ffmpeg-classic-worker.js",
-    });
+  // and use our own classic-worker shim (not the FFmpeg library's
+  // default module worker). The library's default worker uses ESM
+  // imports which force a module worker, and module workers can't
+  // call importScripts. The shim is /ffmpeg-core/ffmpeg-classic-worker.js.
+  const baseURL = coreURL
+    ? coreURL.replace(/\/[^/]*$/, "")
+    : "/ffmpeg-core";
+  await ffmpeg.load({
+    coreURL: coreURL ?? `${baseURL}/ffmpeg-core.js`,
+    wasmURL: wasmURL ?? `${baseURL}/ffmpeg-core.wasm`,
+    classWorkerURL: "/ffmpeg-core/ffmpeg-classic-worker.js",
+  });
   _ffmpeg = ffmpeg;
   return ffmpeg;
-}
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
 }
 
 async function ensureFfmpeg(
@@ -160,42 +176,38 @@ async function initFfmpegEager(
   }
 }
 
+// Encode the assembled frames into an MP4.
+//
+// IMPORTANT: this uses the image2 demuxer with a sequential
+// frame_%03d.png pattern, NOT the concat demuxer. The concat demuxer
+// in FFmpeg.wasm 0.12.6 produces all input frames at PTS=0, which
+// makes vsync=auto treat them all as duplicates and drop ~95% of them
+// — confirmed in production: a 7-image flipbook produced a 0.13s MP4
+// with only 4 frames instead of 56. image2 with a sequential pattern
+// assigns each input a unique increasing PTS and every frame
+// survives. (Verified locally: 56-frame test produced 56 frames, 1.87s,
+// 0 drops. concat produced 4 frames, 0.13s, 52 drops.)
 async function encode(
   total: number,
-  framesPerImage: number,
   post: (m: WorkerOut) => void,
   filename: string,
 ): Promise<{ blob: Blob; filename: string }> {
   const ffmpeg = await ensureFfmpeg((m) => post({ type: "log", message: m }));
   const outName = "out.mp4";
-  const concatList = Array.from(
-    { length: total },
-    (_, i) =>
-      `file 'frame_${pad(Math.floor(i / framesPerImage))}_${pad(i % framesPerImage)}.png'`,
-  ).join("\n");
-  await ffmpeg.writeFile("concat.txt", new TextEncoder().encode(concatList));
 
-  // Run ffmpeg. -framerate sets input rate; the output is rendered at
-  // the same fps so each input frame displays 1/fps seconds. Because
-  // we duplicated frames per image, each image shows for
-  // (framesPerImage/FPS) seconds = speedSeconds.
   await ffmpeg.exec([
-    "-f",
-    "concat",
-    "-safe",
-    "0",
-    "-i",
-    "concat.txt",
     "-framerate",
     String(FPS),
+    "-i",
+    "frame_%03d.png",
+    "-vf",
+    `scale=${FRAME_W}:${FRAME_H}`,
     "-r",
     String(FPS),
     "-c:v",
     "libx264",
     "-pix_fmt",
     "yuv420p",
-    "-vf",
-    `scale=${FRAME_W}:${FRAME_H}`,
     "-movflags",
     "+faststart",
     "-an",
@@ -205,19 +217,16 @@ async function encode(
   const data = await ffmpeg.readFile(outName);
   const outBlob = new Blob([data], { type: "video/mp4" });
 
-  // Cleanup virtual files.
-  const entriesWritten = Math.ceil(total / framesPerImage);
-  for (let i = 0; i < entriesWritten; i += 1) {
-    for (let f = 0; f < framesPerImage; f += 1) {
-      try {
-        await ffmpeg.deleteFile(`frame_${pad(i)}_${pad(f)}.png`);
-      } catch {
-        /* ignore */
-      }
+  // Cleanup virtual files. The frame_NNN.png sequence is contiguous
+  // from 0 to total-1.
+  for (let i = 0; i < total; i += 1) {
+    try {
+      await ffmpeg.deleteFile(`frame_${String(i).padStart(3, "0")}.png`);
+    } catch {
+      /* ignore */
     }
   }
   try {
-    await ffmpeg.deleteFile("concat.txt");
     await ffmpeg.deleteFile(outName);
   } catch {
     /* ignore */
@@ -226,40 +235,10 @@ async function encode(
   return { blob: outBlob, filename };
 }
 
-// describeError: produce a single diagnostic string from any thrown
-// value. The previous fallback to the literal "Render failed" string
-// hid empty-message rejections (notably some FFmpeg.wasm internal
-// errors on iOS Safari). Concatenating every useful property gives
-// the user (and our remote debugging) the real cause.
-function describeError(err: unknown): string {
-  if (err instanceof Error) {
-    const parts: string[] = [];
-    if (err.name && err.name !== "Error") parts.push(`[${err.name}]`);
-    if (err.message) parts.push(err.message);
-    if (err.stack) parts.push(`(${err.stack.split("\n")[0]})`);
-    if (parts.length === 0) {
-      try {
-        parts.push(`unknown Error: ${JSON.stringify(err)}`);
-      } catch {
-        parts.push("unknown Error (not serializable)");
-      }
-    }
-    return parts.join(" ");
-  }
-  if (typeof err === "string") return err;
-  if (err === null || err === undefined) return "Unknown error (no details)";
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return String(err);
-  }
-}
-
-// Worker bootstrap. We attach a single message listener that dispatches
-// to init / frame / encode.
+// Worker bootstrap. We attach a single message listener that
+// dispatches to init / frame / encode.
 declare const self: DedicatedWorkerGlobalScope | Window;
 
-// Only install the worker handlers when running inside a real DedicatedWorker.
 if (
   typeof self !== "undefined" &&
   typeof (self as { postMessage?: unknown }).postMessage === "function" &&
@@ -313,7 +292,12 @@ if (
           post({ type: "error", message: "frame message missing fields" });
           return;
         }
-        const fname = `frame_${pad(data.idx)}_${pad(data.frameIdx)}.png`;
+        // Sequential frame_NNN.png naming so the image2 demuxer can
+        // pick them up via the frame_%03d.png glob pattern. The
+        // orchestrator sends frames in strict (idx, frameIdx) order
+        // so seq = idx * framesPerImage + frameIdx is monotonic.
+        const seq = data.idx * framesPerImage + data.frameIdx;
+        const fname = `frame_${String(seq).padStart(3, "0")}.png`;
         await ffmpeg.writeFile(fname, data.png);
         post({
           type: "progress",
@@ -336,7 +320,7 @@ if (
           type: "progress",
           progress: { phase: "finalizing", completed: total, total },
         });
-        const result = await encode(total, framesPerImage, post, data.filename);
+        const result = await encode(total, post, data.filename);
         post({ type: "success", blob: result.blob, filename: result.filename });
         return;
       }
@@ -354,8 +338,3 @@ if (
 
 // Re-export the helpers used by tests.
 export { frameCountForSpeed as _frameCountForSpeed, totalFrames as _totalFrames };
-
-// BG_COLOR is referenced by the legacy runRender export; keep it
-// exported here so other tooling can read it. We don't use it in
-// the worker because all canvas drawing happens on the main thread.
-export const _BG_COLOR = BG_COLOR;
