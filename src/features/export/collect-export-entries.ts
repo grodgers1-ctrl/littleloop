@@ -11,7 +11,12 @@ export async function collectExportEntries(
   project: Project,
   opts: { range: DateRange; customFrom: string; customTo: string },
 ): Promise<Entry[]> {
-  const all = await listEntries(project.id);
+  // listEntries returns newest-first (timeline display order). The
+  // flipbook export reverses this to oldest-first so the video
+  // shows the child growing up across the timeline, which matches
+  // how parents naturally narrate the journey.
+  const newestFirst = await listEntries(project.id);
+  const all = [...newestFirst].reverse();
   if (opts.range === "all") return all;
   if (opts.range === "month") {
     const today = todayDateOnly();

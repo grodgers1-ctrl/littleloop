@@ -24,7 +24,11 @@ export async function renderSandboxPreview(
   photoCount: number,
   speed: RenderSpeed = 0.25,
 ): Promise<PreviewResult> {
-  const all = await listSandboxEntries();
+  const newestFirst = await listSandboxEntries();
+  // listSandboxEntries returns newest-first (matches the sandbox
+  // timeline UI). The flipbook preview reverses to oldest-first so
+  // the video shows the child growing up, like the main export.
+  const all = [...newestFirst].reverse();
   const selected = all.slice(0, photoCount);
   if (selected.length === 0) {
     throw new Error("No photos in the sandbox to preview.");
