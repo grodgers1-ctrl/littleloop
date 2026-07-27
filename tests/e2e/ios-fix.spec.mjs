@@ -181,7 +181,7 @@ async function main() {
   const chromiumResult = await driveOnBrowser(
     chromium,
     "Chromium",
-    "/assets/video-render.worker-Bva8oNZY.js",
+    "/assets/video-render.worker-BQXCQeFc.js",
   );
 
   // WebKit: Playwright's build doesn't expose transferControlToOffscreen

@@ -109,11 +109,18 @@ async function getFfmpeg(
     // Per-frame progress is reported by the orchestrator based on
     // completed frame writes, not FFmpeg's internal progress.
   });
-  // Load the single-threaded core. Default to the @ffmpeg/core CDN;
-  // allow caller override (e2e tests use a local mock).
+  // Load the single-threaded core from the SAME ORIGIN as the page.
+  // We previously fetched from unpkg.com but iOS Safari 26.5 fails
+  // the worker's importScripts for cross-origin URLs even when
+  // unpkg sends the right CORS / CORP headers. Self-hosting the
+  // core from /ffmpeg-core/ (served by the same Vercel deploy as
+  // the app) avoids the cross-origin importScripts restriction.
+  //
+  // The init message can still override via coreURL/wasmURL for
+  // tests pointing at a local mock.
   const baseURL = coreURL
     ? coreURL.replace(/\/[^/]*$/, "")
-    : "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+    : "/ffmpeg-core";
   await ffmpeg.load({
     coreURL: coreURL ?? `${baseURL}/ffmpeg-core.js`,
     wasmURL: wasmURL ?? `${baseURL}/ffmpeg-core.wasm`,
@@ -131,9 +138,7 @@ async function ensureFfmpeg(
   coreURL?: string,
   wasmURL?: string,
 ): Promise<FFmpeg> {
-  if (_ffmpeg) return _ffmpeg;
-  _ffmpeg = await getFfmpeg(onLog, coreURL, wasmURL);
-  return _ffmpeg;
+  return getFfmpeg(onLog, coreURL, wasmURL);
 }
 
 async function initFfmpegEager(
