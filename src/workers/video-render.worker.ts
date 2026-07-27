@@ -1,38 +1,33 @@
-// MP4 export rendering. Runs inside a Web Worker so the UI thread stays
+// MP4 export encoding. Runs inside a Web Worker so the UI thread stays
 // responsive. Uses @ffmpeg/ffmpeg (single-threaded core) loaded lazily
 // from a public CDN so it doesn't bloat the main JS bundle.
 //
-// Worker protocol (v2 — supports iOS Safari by sourcing canvas +
-// ImageBitmap from the main thread and transferring them in):
+// Worker protocol (v3 — main-thread canvas, worker handles FFmpeg only).
+// Works on every browser including iOS Safari 16.0 (which has no
+// OffscreenCanvas / transferControlToOffscreen):
 //
-//   in  : { type: "init", canvas: OffscreenCanvas }
-//         — called once before any frames. `canvas` is transferred
-//         from the main thread via transferControlToOffscreen(). We
-//         use a SINGLE canvas for the whole render and call
-//         ctx.clearRect between frames, so memory stays bounded.
+//   in  : { type: "init", total, framesPerImage, coreURL?, wasmURL? }
+//         — configures the worker and eagerly loads FFmpeg so any
+//         CDN error surfaces here with a clear message.
 //
-//   in  : { type: "frame", idx, frameIdx, bitmap, capturedDate,
-//           showDates }
-//         — `bitmap` is an ImageBitmap created on the main thread
-//         (because Safari workers can't construct OffscreenCanvas /
-//         call createImageBitmap on some paths). We draw it onto
-//         the shared canvas, call convertToBlob, write the PNG to
-//         FFmpeg's virtual FS, and reply with { type: "frame-done" }.
+//   in  : { type: "frame", idx, frameIdx, png }
+//         — a single PNG-encoded frame to write to FFmpeg's virtual
+//         FS. The main thread has already rendered and PNG-encoded
+//         it on a regular <canvas>. The png bytes are transferred
+//         for zero-copy.
 //
-//   in  : { type: "encode" }
-//         — runs the concat command and produces out.mp4, then
-//         posts { type: "success", blob, filename } or
-//         { type: "error", message }.
+//   in  : { type: "encode", filename }
+//         — runs the concat command, produces out.mp4, posts
+//         { type: "success", blob, filename }.
 //
 //   out : { type: "ready" }
-//   out : { type: "frame-done", idx, frameIdx }
 //   out : { type: "progress", progress: RenderProgress }
 //   out : { type: "log", message }
+//   out : { type: "frame-done", idx, frameIdx }
 //   out : { type: "success", blob, filename }
 //   out : { type: "error", message }
 
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile } from "@ffmpeg/util";
 
 export type RenderSpeed = 0.8 | 0.5 | 0.25;
 
@@ -102,19 +97,26 @@ export function totalFrames(entries: RenderEntry[], speed: RenderSpeed): number 
 
 let _ffmpeg: FFmpeg | null = null;
 
-async function getFfmpeg(onLog: (msg: string) => void): Promise<FFmpeg> {
+async function getFfmpeg(
+  onLog: (msg: string) => void,
+  coreURL?: string,
+  wasmURL?: string,
+): Promise<FFmpeg> {
   if (_ffmpeg) return _ffmpeg;
   const ffmpeg = new FFmpeg();
   ffmpeg.on("log", ({ message }) => onLog(message));
   ffmpeg.on("progress", () => {
-    // We don't surface per-frame progress here; we count by source images.
+    // Per-frame progress is reported by the orchestrator based on
+    // completed frame writes, not FFmpeg's internal progress.
   });
-  // Load the single-threaded core from the @ffmpeg/core CDN.
-  // The @ffmpeg/util 0.12.x default URLs target unpkg.
-  const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+  // Load the single-threaded core. Default to the @ffmpeg/core CDN;
+  // allow caller override (e2e tests use a local mock).
+  const baseURL = coreURL
+    ? coreURL.replace(/\/[^/]*$/, "")
+    : "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
   await ffmpeg.load({
-    coreURL: `${baseURL}/ffmpeg-core.js`,
-    wasmURL: `${baseURL}/ffmpeg-core.wasm`,
+    coreURL: coreURL ?? `${baseURL}/ffmpeg-core.js`,
+    wasmURL: wasmURL ?? `${baseURL}/ffmpeg-core.wasm`,
   });
   _ffmpeg = ffmpeg;
   return ffmpeg;
@@ -124,81 +126,16 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-function drawFrameOnCanvas(
-  ctx: OffscreenCanvasRenderingContext2D,
-  img: ImageBitmap,
-  showDate: string | null,
-): void {
-  ctx.fillStyle = BG_COLOR;
-  ctx.fillRect(0, 0, FRAME_W, FRAME_H);
-  const fit = letterboxFit(img.width, img.height);
-  ctx.drawImage(img, fit.offX, fit.offY, fit.outW, fit.outH);
-  if (showDate) {
-    ctx.fillStyle = "rgba(43, 42, 38, 0.78)";
-    ctx.fillRect(0, FRAME_H - 96, FRAME_W, 96);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "600 32px 'Helvetica Neue', Arial, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(showDate, FRAME_W / 2, FRAME_H - 48);
-  }
-}
-
-async function canvasToPngBytes(canvas: OffscreenCanvas): Promise<Uint8Array> {
-  const blob = await canvas.convertToBlob({ type: "image/png" });
-  return new Uint8Array(await blob.arrayBuffer());
-}
-
-// Worker-side state. Populated by the `init` message.
-interface WorkerState {
-  canvas: OffscreenCanvas | null;
-  ctx: OffscreenCanvasRenderingContext2D | null;
-  ffmpeg: FFmpeg | null;
-  total: number;
-  completed: number;
-  framesPerImage: number;
-  speed: RenderSpeed;
-}
-
-const state: WorkerState = {
-  canvas: null,
-  ctx: null,
-  ffmpeg: null,
-  total: 0,
-  completed: 0,
-  framesPerImage: 0,
-  speed: 0.5,
-};
-
 async function ensureFfmpeg(
   onLog: (msg: string) => void,
   coreURL?: string,
   wasmURL?: string,
 ): Promise<FFmpeg> {
-  if (state.ffmpeg) return state.ffmpeg;
-  const ffmpeg = new FFmpeg();
-  ffmpeg.on("log", ({ message }) => onLog(message));
-  ffmpeg.on("progress", () => {
-    // We don't surface per-frame progress here; we count by source images.
-  });
-  // Load the single-threaded core. Default to the @ffmpeg/core CDN;
-  // allow the init message to override (useful for tests pointing at
-  // a local mock).
-  const baseURL = coreURL
-    ? coreURL.replace(/\/[^/]*$/, "")
-    : "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
-  await ffmpeg.load({
-    coreURL: coreURL ?? `${baseURL}/ffmpeg-core.js`,
-    wasmURL: wasmURL ?? `${baseURL}/ffmpeg-core.wasm`,
-  });
-  state.ffmpeg = ffmpeg;
-  return ffmpeg;
+  if (_ffmpeg) return _ffmpeg;
+  _ffmpeg = await getFfmpeg(onLog, coreURL, wasmURL);
+  return _ffmpeg;
 }
 
-// Eagerly initialise FFmpeg so any CDN failure surfaces during init
-// (a clear "Failed to load FFmpeg" error) rather than mid-render (a
-// confusing frame-write failure). The init message waits for FFmpeg
-// before posting ready.
 async function initFfmpegEager(
   post: (m: WorkerOut) => void,
   coreURL?: string,
@@ -217,54 +154,18 @@ async function initFfmpegEager(
   }
 }
 
-// Render a single source image into `framesPerImage` PNG frames.
-// We cache the source ImageBitmap across the inner loop because
-// every output frame is the same image.
-async function writeFramesForEntry(
-  msg: {
-    idx: number;
-    bitmap: ImageBitmap;
-    capturedDate: string;
-    showDates: boolean;
-  },
-  post: (m: WorkerOut) => void,
-  onProgress: (p: RenderProgress) => void,
-): Promise<void> {
-  const ctx = state.ctx;
-  const ffmpeg = await ensureFfmpeg((m) => post({ type: "log", message: m }));
-  if (!ctx || !state.canvas) {
-    throw new Error("Worker not initialised — call init first.");
-  }
-  const showDate = msg.showDates ? msg.capturedDate : null;
-  drawFrameOnCanvas(ctx, msg.bitmap, showDate);
-
-  for (let f = 0; f < state.framesPerImage; f += 1) {
-    const png = await canvasToPngBytes(state.canvas);
-    const fname = `frame_${pad(msg.idx)}_${pad(f)}.png`;
-    await ffmpeg.writeFile(fname, png);
-    state.completed += 1;
-    onProgress({
-      phase: "rendering",
-      completed: state.completed,
-      total: state.total,
-    });
-  }
-}
-
 async function encode(
   total: number,
+  framesPerImage: number,
   post: (m: WorkerOut) => void,
-  onProgress: (p: RenderProgress) => void,
   filename: string,
 ): Promise<{ blob: Blob; filename: string }> {
   const ffmpeg = await ensureFfmpeg((m) => post({ type: "log", message: m }));
-  onProgress({ phase: "finalizing", completed: total, total });
-
   const outName = "out.mp4";
   const concatList = Array.from(
     { length: total },
     (_, i) =>
-      `file 'frame_${pad(Math.floor(i / state.framesPerImage))}_${pad(i % state.framesPerImage)}.png'`,
+      `file 'frame_${pad(Math.floor(i / framesPerImage))}_${pad(i % framesPerImage)}.png'`,
   ).join("\n");
   await ffmpeg.writeFile("concat.txt", new TextEncoder().encode(concatList));
 
@@ -298,11 +199,10 @@ async function encode(
   const data = await ffmpeg.readFile(outName);
   const outBlob = new Blob([data], { type: "video/mp4" });
 
-  // Cleanup virtual files. Iterate by (idx, frameIdx) for every
-  // source image we wrote.
-  const entriesWritten = Math.ceil(total / state.framesPerImage);
+  // Cleanup virtual files.
+  const entriesWritten = Math.ceil(total / framesPerImage);
   for (let i = 0; i < entriesWritten; i += 1) {
-    for (let f = 0; f < state.framesPerImage; f += 1) {
+    for (let f = 0; f < framesPerImage; f += 1) {
       try {
         await ffmpeg.deleteFile(`frame_${pad(i)}_${pad(f)}.png`);
       } catch {
@@ -320,7 +220,37 @@ async function encode(
   return { blob: outBlob, filename };
 }
 
-// Worker bootstrap.
+// describeError: produce a single diagnostic string from any thrown
+// value. The previous fallback to the literal "Render failed" string
+// hid empty-message rejections (notably some FFmpeg.wasm internal
+// errors on iOS Safari). Concatenating every useful property gives
+// the user (and our remote debugging) the real cause.
+function describeError(err: unknown): string {
+  if (err instanceof Error) {
+    const parts: string[] = [];
+    if (err.name && err.name !== "Error") parts.push(`[${err.name}]`);
+    if (err.message) parts.push(err.message);
+    if (err.stack) parts.push(`(${err.stack.split("\n")[0]})`);
+    if (parts.length === 0) {
+      try {
+        parts.push(`unknown Error: ${JSON.stringify(err)}`);
+      } catch {
+        parts.push("unknown Error (not serializable)");
+      }
+    }
+    return parts.join(" ");
+  }
+  if (typeof err === "string") return err;
+  if (err === null || err === undefined) return "Unknown error (no details)";
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+// Worker bootstrap. We attach a single message listener that dispatches
+// to init / frame / encode.
 declare const self: DedicatedWorkerGlobalScope | Window;
 
 // Only install the worker handlers when running inside a real DedicatedWorker.
@@ -333,18 +263,19 @@ if (
     (self as unknown as Worker).postMessage(m);
   };
 
+  // Module-scoped state populated by the first `init` message.
+  let total = 0;
+  let framesPerImage = 1;
+
   self.onmessage = async (e: MessageEvent) => {
     const data = e.data as {
       type?: string;
-      canvas?: OffscreenCanvas;
       idx?: number;
       frameIdx?: number;
-      bitmap?: ImageBitmap;
-      capturedDate?: string;
-      showDates?: boolean;
-      total?: number;
-      speed?: RenderSpeed;
+      png?: Uint8Array;
       filename?: string;
+      total?: number;
+      framesPerImage?: number;
       coreURL?: string;
       wasmURL?: string;
     };
@@ -355,60 +286,38 @@ if (
 
     try {
       if (data.type === "init") {
-        if (!data.canvas) {
-          post({
-            type: "error",
-            message:
-              "OffscreenCanvas is not available. Little Loop needs a modern browser (iOS Safari 16.4+, Chrome, Edge, Firefox).",
-          });
-          return;
-        }
-        state.canvas = data.canvas;
-        const ctx = state.canvas.getContext("2d");
-        if (!ctx) {
-          post({
-            type: "error",
-            message: "Could not get a 2D context from the OffscreenCanvas.",
-          });
-          return;
-        }
-        state.ctx = ctx;
-        state.speed = data.speed ?? 0.5;
-        state.framesPerImage = frameCountForSpeed(state.speed);
-        state.total = data.total ?? 0;
-        state.completed = 0;
+        total = data.total ?? 0;
+        framesPerImage = data.framesPerImage ?? 1;
         // Eagerly load FFmpeg so CDN errors surface during init with
-        // a clear message, instead of failing mid-render. The init
-        // message may override coreURL/wasmURL (e2e tests do this to
-        // point at a local mock without hitting unpkg.com).
+        // a clear message, instead of failing mid-render.
         await initFfmpegEager(post, data.coreURL, data.wasmURL);
         post({ type: "ready" });
         return;
       }
 
       if (data.type === "frame") {
+        const ffmpeg = await ensureFfmpeg((m) =>
+          post({ type: "log", message: m }),
+        );
         if (
-          !state.ctx ||
-          !state.canvas ||
           typeof data.idx !== "number" ||
-          !data.bitmap
+          typeof data.frameIdx !== "number" ||
+          !(data.png instanceof Uint8Array)
         ) {
-          post({ type: "error", message: "Worker not initialised for frames." });
+          post({ type: "error", message: "frame message missing fields" });
           return;
         }
-        const onProgress = (p: RenderProgress) =>
-          post({ type: "progress", progress: p });
-        await writeFramesForEntry(
-          {
-            idx: data.idx,
-            bitmap: data.bitmap,
-            capturedDate: data.capturedDate ?? "",
-            showDates: data.showDates ?? false,
+        const fname = `frame_${pad(data.idx)}_${pad(data.frameIdx)}.png`;
+        await ffmpeg.writeFile(fname, data.png);
+        post({
+          type: "progress",
+          progress: {
+            phase: "rendering",
+            completed: data.idx * framesPerImage + data.frameIdx + 1,
+            total,
           },
-          post,
-          onProgress,
-        );
-        post({ type: "frame-done", idx: data.idx, frameIdx: data.frameIdx ?? 0 });
+        });
+        post({ type: "frame-done", idx: data.idx, frameIdx: data.frameIdx });
         return;
       }
 
@@ -417,33 +326,18 @@ if (
           post({ type: "error", message: "encode requires filename" });
           return;
         }
-        const onProgress = (p: RenderProgress) =>
-          post({ type: "progress", progress: p });
-        const result = await encode(state.total, post, onProgress, data.filename);
         post({
-          type: "success",
-          blob: result.blob,
-          filename: result.filename,
+          type: "progress",
+          progress: { phase: "finalizing", completed: total, total },
         });
+        const result = await encode(total, framesPerImage, post, data.filename);
+        post({ type: "success", blob: result.blob, filename: result.filename });
         return;
       }
 
       post({ type: "error", message: `Unknown message type: ${data.type}` });
     } catch (err) {
-      // Surface a useful message. The generic catch was hiding the
-      // actual cause ("OffscreenCanvas is not defined", "convertToBlob
-      // is not a function", etc.).
-      let message = "Render failed";
-      if (err instanceof Error) {
-        message = err.message || (err.name ? `${err.name}` : "Render failed");
-        if (err.stack) message += ` (${err.stack.split("\n")[0]})`;
-      } else {
-        message = String(err);
-      }
-      post({
-        type: "error",
-        message,
-      });
+      post({ type: "error", message: describeError(err) });
     }
   };
 
@@ -454,105 +348,8 @@ if (
 
 // Re-export the helpers used by tests.
 export { frameCountForSpeed as _frameCountForSpeed, totalFrames as _totalFrames };
-// Helper kept for symmetry with imports in some bundlers.
-export const fetchFileHelper = fetchFile;
 
-// Backwards-compatible export for the previous (non-iOS) API. The
-// unit tests import `runRender` to verify the frame math. The real
-// production path goes through the new init/frame/encode protocol
-// above.
-export async function runRender(
-  request: RenderRequest,
-  onProgress: (p: RenderProgress) => void,
-  onLog: (msg: string) => void,
-): Promise<{ blob: Blob; filename: string }> {
-  // Re-implement the old single-message API using the same building
-  // blocks as the new protocol. This path is only exercised in unit
-  // tests — production uses init/frame/encode.
-  if (request.entries.length === 0) {
-    throw new Error("There are no photos to render.");
-  }
-  onProgress({
-    phase: "preparing",
-    completed: 0,
-    total: request.entries.length,
-  });
-  const ffmpeg = await getFfmpeg(onLog);
-  const sorted = [...request.entries].sort((a, b) =>
-    a.capturedDate.localeCompare(b.capturedDate),
-  );
-  const framesPerImage = frameCountForSpeed(request.speedSeconds);
-  const total = totalFrames(sorted, request.speedSeconds);
-  let completed = 0;
-  for (let i = 0; i < sorted.length; i += 1) {
-    const e = sorted[i];
-    const blob = new Blob([e.bytes], { type: e.mimeType });
-    let bitmap: ImageBitmap;
-    try {
-      bitmap = await createImageBitmap(blob);
-    } catch {
-      throw new Error(`Image ${i + 1} could not be decoded.`);
-    }
-    const canvas = new OffscreenCanvas(FRAME_W, FRAME_H);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("OffscreenCanvas 2D context unavailable");
-    const showDate = request.showDates ? e.capturedDate : null;
-    drawFrameOnCanvas(ctx, bitmap, showDate);
-    bitmap.close();
-    for (let f = 0; f < framesPerImage; f += 1) {
-      const png = await canvasToPngBytes(canvas);
-      const fname = `frame_${pad(i)}_${pad(f)}.png`;
-      await ffmpeg.writeFile(fname, png);
-      completed += 1;
-      onProgress({ phase: "rendering", completed, total });
-    }
-  }
-  onProgress({ phase: "finalizing", completed: total, total });
-  const outName = "out.mp4";
-  const concatList = Array.from(
-    { length: total },
-    (_, i) =>
-      `file 'frame_${pad(Math.floor(i / framesPerImage))}_${pad(i % framesPerImage)}.png'`,
-  ).join("\n");
-  await ffmpeg.writeFile("concat.txt", new TextEncoder().encode(concatList));
-  await ffmpeg.exec([
-    "-f",
-    "concat",
-    "-safe",
-    "0",
-    "-i",
-    "concat.txt",
-    "-framerate",
-    String(FPS),
-    "-r",
-    String(FPS),
-    "-c:v",
-    "libx264",
-    "-pix_fmt",
-    "yuv420p",
-    "-vf",
-    `scale=${FRAME_W}:${FRAME_H}`,
-    "-movflags",
-    "+faststart",
-    "-an",
-    outName,
-  ]);
-  const data = await ffmpeg.readFile(outName);
-  const outBlob = new Blob([data], { type: "video/mp4" });
-  for (let i = 0; i < sorted.length; i += 1) {
-    for (let f = 0; f < framesPerImage; f += 1) {
-      try {
-        await ffmpeg.deleteFile(`frame_${pad(i)}_${pad(f)}.png`);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  try {
-    await ffmpeg.deleteFile("concat.txt");
-    await ffmpeg.deleteFile(outName);
-  } catch {
-    /* ignore */
-  }
-  return { blob: outBlob, filename: request.exportFilename };
-}
+// BG_COLOR is referenced by the legacy runRender export; keep it
+// exported here so other tooling can read it. We don't use it in
+// the worker because all canvas drawing happens on the main thread.
+export const _BG_COLOR = BG_COLOR;

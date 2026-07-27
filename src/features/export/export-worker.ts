@@ -1,15 +1,12 @@
-// Singleton Worker for FFmpeg rendering. The worker is created once
-// and reused across exports. The FFmpeg core inside the worker is also
-// loaded once (module-scoped _ffmpeg in video-render.worker.ts) so the
-// second export reuses the already-downloaded WASM binary.
+// Singleton Worker for FFmpeg encoding. The worker is created once
+// and reused across exports. The FFmpeg core inside the worker is
+// also loaded once (module-scoped _ffmpeg in video-render.worker.ts)
+// so the second export reuses the already-downloaded WASM binary.
 //
-// The orchestrator here handles the transferable-OffscreenCanvas
-// protocol: the main thread owns the canvas, creates an ImageBitmap
-// per source photo, and posts the bitmap (transferable) to the
-// worker for drawing + PNG encoding + FFmpeg writeFile. This keeps
-// the worker able to operate in environments where it cannot
-// construct OffscreenCanvas or call createImageBitmap on its own
-// (notably some iOS Safari builds).
+// Frame rendering happens on the MAIN THREAD via a regular <canvas>.
+// This is critical for iOS Safari 16.x compatibility — those builds
+// lack OffscreenCanvas entirely. The worker only receives PNG-encoded
+// frames and writes them to FFmpeg's VFS.
 
 import type {
   RenderRequest,
@@ -42,30 +39,99 @@ export interface ImageSourceLike {
   capturedDate: string;
 }
 
-// Run an export end-to-end. The caller passes the request (used to
-// compute total frame count + filename) and a function that yields
-// each source image as bytes. The orchestrator owns the canvas and
-// ImageBitmap lifecycle; the worker handles drawing + FFmpeg.
+const FRAME_W = 720;
+const FRAME_H = 1280;
+const BG_COLOR = "#fbf2e6";
+
+// Letterbox math: fit image into frame preserving aspect ratio.
+function letterboxFit(srcW: number, srcH: number): {
+  outW: number;
+  outH: number;
+  offX: number;
+  offY: number;
+} {
+  if (!srcW || !srcH) return { outW: FRAME_W, outH: FRAME_H, offX: 0, offY: 0 };
+  const scale = Math.min(FRAME_W / srcW, FRAME_H / srcH);
+  const outW = Math.round(srcW * scale);
+  const outH = Math.round(srcH * scale);
+  const offX = Math.round((FRAME_W - outW) / 2);
+  const offY = Math.round((FRAME_H - outH) / 2);
+  return { outW, outH, offX, offY };
+}
+
+// Draw one source bitmap onto the host canvas, optionally with the
+// captured-date label. Matches the worker-side drawFrameOnCanvas so
+// the output is identical regardless of which browser.
+function drawFrame(
+  ctx: CanvasRenderingContext2D,
+  bitmap: ImageBitmap,
+  showDate: string | null,
+): void {
+  ctx.fillStyle = BG_COLOR;
+  ctx.fillRect(0, 0, FRAME_W, FRAME_H);
+  const fit = letterboxFit(bitmap.width, bitmap.height);
+  ctx.drawImage(bitmap, fit.offX, fit.offY, fit.outW, fit.outH);
+  if (showDate) {
+    ctx.fillStyle = "rgba(43, 42, 38, 0.78)";
+    ctx.fillRect(0, FRAME_H - 96, FRAME_W, 96);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "600 32px 'Helvetica Neue', Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(showDate, FRAME_W / 2, FRAME_H - 48);
+  }
+}
+
+// Convert the canvas contents to a PNG Uint8Array. Uses canvas.toBlob
+// (available everywhere; iOS Safari 16 included). Returns a fresh
+// Uint8Array so the caller can transfer the underlying buffer.
+function canvasToPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("canvas.toBlob returned null"));
+        return;
+      }
+      blob
+        .arrayBuffer()
+        .then((ab) => resolve(new Uint8Array(ab)))
+        .catch(reject);
+    }, "image/png");
+  });
+}
+
+// Run an export end-to-end. Main thread renders frames on a regular
+// <canvas>; the worker writes PNGs into FFmpeg's virtual FS and runs
+// the concat command at the end.
 export async function runExport(
   request: RenderRequest,
   getImage: (idx: number) => Promise<ImageSourceLike | null>,
 ): Promise<{ blob: Blob; filename: string }> {
-  if (typeof OffscreenCanvas === "undefined") {
+  if (typeof document === "undefined") {
     throw new Error(
-      "Your browser does not support OffscreenCanvas. Little Loop needs iOS Safari 16.4+, Chrome, Edge, or Firefox.",
+      "runExport must be called from the main thread (it needs document.createElement).",
     );
   }
 
   const worker = getWorker();
-
-  const framesPerImage = Math.max(
-    1,
-    Math.round(request.speedSeconds * 30),
-  );
+  const framesPerImage = Math.max(1, Math.round(request.speedSeconds * 30));
   const total = request.entries.length * framesPerImage;
 
-  // Wait for the worker's `ready` (sent at boot) before sending init.
-  // We attach a per-export listener that filters by message type.
+  // Build the host canvas. We use a real <canvas> (NOT OffscreenCanvas)
+  // so this works on every browser including iOS Safari 16.0 which has
+  // no OffscreenCanvas at all.
+  const host = document.createElement("canvas");
+  host.width = FRAME_W;
+  host.height = FRAME_H;
+  const ctx = host.getContext("2d");
+  if (!ctx) {
+    throw new Error(
+      "Your browser does not support the 2D canvas API. Little Loop needs a modern browser.",
+    );
+  }
+
+  // Helper: send a worker message and await a specific reply type.
+  // The third arg is the transferable list (e.g. [pngBytes]).
   const sendAndAwait = <T extends WorkerOut["type"]>(
     payload: object,
     awaitType: T,
@@ -94,48 +160,17 @@ export async function runExport(
       worker.postMessage(payload, transfer);
     });
 
-  // Build the OffscreenCanvas on the main thread, then transfer it
-  // to the worker. transferControlToOffscreen is a HTMLCanvasElement
-  // method that returns an OffscreenCanvas — the returned object
-  // becomes the worker's render target. Real iOS Safari 16.4+,
-  // Chrome, Edge, and Firefox all support this.
-  //
-  // Some very old WebKit builds (pre-16.4) lack both this API and
-  // the OffscreenCanvas constructor itself. We surface a clear error
-  // in that case so the user knows the browser is the problem, not
-  // the app.
-  const host = document.createElement("canvas");
-  host.width = 720;
-  host.height = 1280;
-  if (typeof host.transferControlToOffscreen !== "function") {
-    throw new Error(
-      "Your browser does not support OffscreenCanvas. Little Loop needs iOS Safari 16.4+, Chrome, Edge, or Firefox.",
-    );
-  }
-  const transferred = host.transferControlToOffscreen();
-
-  // Send init and wait for ready. The OffscreenCanvas is a
-  // transferable — pass it in the second arg so it moves to the
-  // worker instead of being cloned (which would throw).
+  // Init: tell the worker how many frames total and how many per
+  // source image. Worker eagerly loads FFmpeg so any CDN error
+  // surfaces here as a clean "Failed to load FFmpeg: ..." message.
   await sendAndAwait(
-    {
-      type: "init",
-      canvas: transferred,
-      total,
-      speed: request.speedSeconds,
-    },
+    { type: "init", total, framesPerImage },
     "ready",
-    [transferred],
   );
 
-  // For each entry: decode on main thread, transfer bitmap, wait
-  // for frame-done.
-  const onProgress = (p: RenderProgress) => {
-    // We re-emit progress through a per-export notifier. The
-    // orchestrator sets _activeProgress on init.
-    if (_activeProgress) _activeProgress(p);
-  };
-
+  // For each source entry: decode to ImageBitmap on main thread,
+  // draw + PNG-encode N times (one per output frame), and post each
+  // PNG to the worker.
   for (let idx = 0; idx < request.entries.length; idx += 1) {
     const src = await getImage(idx);
     if (!src) {
@@ -148,48 +183,61 @@ export async function runExport(
     } catch {
       throw new Error(`Image ${idx + 1} could not be decoded.`);
     }
-    onProgress({
-      phase: "rendering",
-      completed: idx * framesPerImage,
-      total,
-    });
-    await sendAndAwait(
-      {
-        type: "frame",
-        idx,
-        frameIdx: 0,
-        bitmap,
-        capturedDate: src.capturedDate,
-        showDates: request.showDates,
-      },
-      "frame-done",
-      [bitmap],
-    );
+    const showDate = request.showDates ? src.capturedDate : null;
+    drawFrame(ctx, bitmap, showDate);
+
+    for (let f = 0; f < framesPerImage; f += 1) {
+      const png = await canvasToPng(host);
+      await sendAndAwait(
+        { type: "frame", idx, frameIdx: f, png },
+        "frame-done",
+        [png.buffer],
+      );
+    }
     bitmap.close();
   }
 
-  // Final encode.
-  onProgress({ phase: "finalizing", completed: total, total });
+  // Encode. Worker runs the concat command and returns the MP4 blob.
   const success = await sendAndAwait(
     { type: "encode", filename: request.exportFilename },
     "success",
   );
-
   return { blob: success.blob, filename: success.filename };
 }
 
-// Per-export progress notifier. The runExport flow pushes progress
-// updates here, and the higher-level startExport wires the
-// user-supplied onProgress callback into this slot while the export
-// is in flight.
-let _activeProgress: ((p: RenderProgress) => void) | null = null;
+// describeError: produce a single diagnostic string from any thrown
+// value. The previous fallback to the literal "Render failed" string
+// hid empty-message rejections (notably some FFmpeg.wasm internal
+// errors on iOS Safari). Concatenating every useful property gives
+// the user (and our remote debugging) the real cause.
+export function describeError(err: unknown): string {
+  if (err instanceof Error) {
+    const parts: string[] = [];
+    if (err.name && err.name !== "Error") parts.push(`[${err.name}]`);
+    if (err.message) parts.push(err.message);
+    if (err.stack) parts.push(`(${err.stack.split("\n")[0]})`);
+    if (parts.length === 0) {
+      try {
+        parts.push(`unknown Error: ${JSON.stringify(err)}`);
+      } catch {
+        parts.push("unknown Error (not serializable)");
+      }
+    }
+    return parts.join(" ");
+  }
+  if (typeof err === "string") return err;
+  if (err === null || err === undefined) return "Unknown error (no details)";
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
 
 export function startExport(
   request: RenderRequest,
   handle: ExportHandle,
 ): void {
-  _activeProgress = handle.onProgress;
-
   runExport(request, async (idx) => {
     const entry = request.entries[idx];
     if (!entry) return null;
@@ -200,12 +248,10 @@ export function startExport(
     };
   })
     .then((result) => {
-      _activeProgress = null;
       handle.onSuccess(result.blob, result.filename);
     })
     .catch((err) => {
-      _activeProgress = null;
-      handle.onError(err instanceof Error ? err.message : "Render failed");
+      handle.onError(describeError(err));
     });
 }
 

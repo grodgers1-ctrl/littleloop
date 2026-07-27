@@ -40,6 +40,7 @@ export function ExportScreen({ project, navigate }: Props) {
   const [progress, setProgress] = useState<RenderProgress | null>(null);
   const [result, setResult] = useState<{ url: string; filename: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCopied, setErrorCopied] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
 
   // Clean up the result URL on unmount.
@@ -205,7 +206,36 @@ export function ExportScreen({ project, navigate }: Props) {
 
           {error ? (
             <div className="ll-status ll-status-error" role="alert">
-              {error}
+              <div>{error}</div>
+              <button
+                type="button"
+                className="ll-btn"
+                style={{
+                  marginTop: 8,
+                  padding: "6px 10px",
+                  fontSize: 13,
+                  background: "rgba(255,255,255,0.6)",
+                  color: "var(--ll-danger)",
+                  border: "1px solid currentColor",
+                  borderRadius: 8,
+                }}
+                onClick={() => {
+                  // Copy the full diagnostic (message + UA + timestamp)
+                  // so the user can paste it into a bug report without
+                  // needing Web Inspector.
+                  const ua = navigator.userAgent;
+                  const payload =
+                    `[Little Loop export error]\n` +
+                    `time: ${new Date().toISOString()}\n` +
+                    `ua:   ${ua}\n` +
+                    `error: ${error}\n`;
+                  void navigator.clipboard?.writeText(payload);
+                  setErrorCopied(true);
+                  window.setTimeout(() => setErrorCopied(false), 2000);
+                }}
+              >
+                {errorCopied ? "Copied — paste in your bug report" : "Copy error details"}
+              </button>
             </div>
           ) : null}
           {isError ? (
