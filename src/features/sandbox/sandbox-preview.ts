@@ -10,8 +10,8 @@ import type {
   RenderEntry,
   RenderRequest,
   RenderSpeed,
-  WorkerOut,
 } from "../../workers/video-render.worker";
+import { startExport } from "../export/export-worker";
 import type { Project } from "../../db/schema";
 
 export interface PreviewResult {
@@ -25,7 +25,6 @@ export async function renderSandboxPreview(
   speed: RenderSpeed = 0.25,
 ): Promise<PreviewResult> {
   const all = await listSandboxEntries();
-  // listSandboxEntries is already sorted newest-first.
   const selected = all.slice(0, photoCount);
   if (selected.length === 0) {
     throw new Error("No photos in the sandbox to preview.");
@@ -50,10 +49,6 @@ export async function renderSandboxPreview(
   const filename = flipbookFilename(project.childName, new Date().toISOString().slice(0, 10));
 
   return new Promise<PreviewResult>((resolve, reject) => {
-    const worker = new Worker(
-      new URL("../../workers/video-render.worker.ts", import.meta.url),
-      { type: "module" },
-    );
     const request: RenderRequest = {
       entries: renderEntries,
       speedSeconds: speed,
@@ -61,21 +56,14 @@ export async function renderSandboxPreview(
       childName: project.childName,
       exportFilename: filename,
     };
-    worker.onmessage = (e: MessageEvent<WorkerOut>) => {
-      const msg = e.data;
-      if (msg.type === "success") {
-        worker.terminate();
-        resolve({ blob: msg.blob, filename: msg.filename });
-      } else if (msg.type === "error") {
-        worker.terminate();
-        reject(new Error(msg.message));
-      }
-      // progress / log messages are ignored for the preview CTA.
-    };
-    worker.onerror = (ev) => {
-      worker.terminate();
-      reject(new Error(ev.message || "Preview worker error"));
-    };
-    worker.postMessage({ type: "render", request });
+    startExport(request, {
+      onProgress: () => {},
+      onSuccess: (blob, fn) => {
+        resolve({ blob, filename: fn });
+      },
+      onError: (message) => {
+        reject(new Error(message));
+      },
+    });
   });
 }

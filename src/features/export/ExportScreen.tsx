@@ -11,8 +11,8 @@ import type {
   RenderProgress,
   RenderRequest,
   RenderSpeed,
-  WorkerOut,
 } from "../../workers/video-render.worker";
+import { startExport } from "./export-worker";
 import {
   collectExportEntries,
   type DateRange,
@@ -35,16 +35,15 @@ export function ExportScreen({ project, navigate }: Props) {
   const [progress, setProgress] = useState<RenderProgress | null>(null);
   const [result, setResult] = useState<{ url: string; filename: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [worker, setWorker] = useState<Worker | null>(null);
 
+  // Clean up the result URL on unmount.
   useEffect(() => {
     return () => {
-      worker?.terminate();
       if (result) URL.revokeObjectURL(result.url);
     };
-  }, [worker, result]);
+  }, [result]);
 
-  async function startExport() {
+  async function handleStartExport() {
     setError(null);
     setPhase("preparing");
     setProgress({ phase: "preparing", completed: 0, total: 0 });
@@ -78,12 +77,6 @@ export function ExportScreen({ project, navigate }: Props) {
 
     const filename = makeFlipbookFilename(project.childName, todayDateOnly());
 
-    const w = new Worker(
-      new URL("../../workers/video-render.worker.ts", import.meta.url),
-      { type: "module" },
-    );
-    setWorker(w);
-
     const request: RenderRequest = {
       entries: renderEntries,
       speedSeconds: speed,
@@ -92,29 +85,23 @@ export function ExportScreen({ project, navigate }: Props) {
       exportFilename: filename,
     };
 
-    w.onmessage = (e: MessageEvent<WorkerOut>) => {
-      const msg = e.data;
-      if (msg.type === "progress") {
-        setProgress(msg.progress);
-        if (msg.progress.phase === "preparing") setPhase("preparing");
-        if (msg.progress.phase === "rendering") setPhase("rendering");
-        if (msg.progress.phase === "finalizing") setPhase("finalizing");
-      } else if (msg.type === "success") {
-        const url = URL.createObjectURL(msg.blob);
-        setResult({ url, filename: msg.filename });
+    startExport(request, {
+      onProgress: (p: RenderProgress) => {
+        setProgress(p);
+        if (p.phase === "preparing") setPhase("preparing");
+        if (p.phase === "rendering") setPhase("rendering");
+        if (p.phase === "finalizing") setPhase("finalizing");
+      },
+      onSuccess: (blob: Blob, fn: string) => {
+        const url = URL.createObjectURL(blob);
+        setResult({ url, filename: fn });
         setPhase("done");
-        w.terminate();
-      } else if (msg.type === "error") {
-        setError(msg.message);
+      },
+      onError: (message: string) => {
+        setError(message);
         setPhase("error");
-        w.terminate();
-      }
-    };
-    w.onerror = (ev) => {
-      setError(ev.message || "Worker error");
-      setPhase("error");
-    };
-    w.postMessage({ type: "render", request });
+      },
+    });
   }
 
   if (phase === "config" || phase === "error") {
@@ -209,7 +196,7 @@ export function ExportScreen({ project, navigate }: Props) {
           ) : null}
 
           <div className="ll-stack">
-            <Button variant="primary" block onClick={startExport}>
+            <Button variant="primary" block onClick={handleStartExport}>
               Start export
             </Button>
             <Button block onClick={() => navigate({ name: "home" })}>
