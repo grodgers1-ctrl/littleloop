@@ -323,6 +323,55 @@ img {
   margin-top: 0;
 }
 
+/* Celebration toast (first export, etc.)
+   Top-anchored, non-blocking, auto-dismisses. Distinct from the
+   modal: no backdrop, no scroll lock. */
+.ll-celebration-toast {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: auto;
+  max-width: calc(100% - 24px);
+  width: 360px;
+  animation: ll-celebration-toast-in 280ms ease-out;
+}
+.ll-celebration-toast-inner {
+  background: var(--ll-success);
+  color: #fff;
+  border-radius: var(--ll-radius);
+  padding: 14px 16px;
+  box-shadow: var(--ll-shadow);
+  text-align: center;
+}
+.ll-celebration-toast-inner strong {
+  font-size: 1.05rem;
+  display: block;
+  margin-bottom: 4px;
+}
+.ll-celebration-toast-detail {
+  font-size: 0.92rem;
+  opacity: 0.95;
+  margin-bottom: 6px;
+}
+.ll-celebration-toast-dismiss {
+  font-size: 0.78rem;
+  opacity: 0.8;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+@keyframes ll-celebration-toast-in {
+  from {
+    transform: translate(-50%, -16px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
 /* Progress */
 .ll-progress {
   height: 8px;

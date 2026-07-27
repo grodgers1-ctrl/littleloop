@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
+import { CelebrationToast } from "../../components/CelebrationToast";
 import { ProgressBar } from "../../components/ProgressBar";
 import type { Project } from "../../db/schema";
 import { getDb } from "../../db/database";
@@ -13,6 +14,10 @@ import type {
   RenderSpeed,
 } from "../../workers/video-render.worker";
 import { startExport } from "./export-worker";
+import {
+  hasCompletedFirstExport,
+  markFirstExportDone,
+} from "./first-export-flag";
 import {
   collectExportEntries,
   type DateRange,
@@ -35,6 +40,7 @@ export function ExportScreen({ project, navigate }: Props) {
   const [progress, setProgress] = useState<RenderProgress | null>(null);
   const [result, setResult] = useState<{ url: string; filename: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // Clean up the result URL on unmount.
   useEffect(() => {
@@ -96,6 +102,10 @@ export function ExportScreen({ project, navigate }: Props) {
         const url = URL.createObjectURL(blob);
         setResult({ url, filename: fn });
         setPhase("done");
+        if (!hasCompletedFirstExport()) {
+          markFirstExportDone();
+          setShowCelebration(true);
+        }
       },
       onError: (message: string) => {
         setError(message);
@@ -235,6 +245,12 @@ export function ExportScreen({ project, navigate }: Props) {
             </Button>
           </div>
         </div>
+        <CelebrationToast
+          open={showCelebration}
+          message="Your first flipbook is ready."
+          detail={`Saved ${result.filename}. FFmpeg is now cached, so your next export will be faster.`}
+          onClose={() => setShowCelebration(false)}
+        />
       </div>
     );
   }
