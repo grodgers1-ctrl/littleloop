@@ -198,8 +198,11 @@ export async function runExport(
   // Init: tell the worker how many frames total and how many per
   // source image. Worker eagerly loads FFmpeg so any CDN error
   // surfaces here as a clean "Failed to load FFmpeg: ..." message.
+  // V2.5 — forward the optional vfChain so the worker uses the
+  // engine-composed FFmpeg -vf chain instead of the default
+  // scale= filter.
   await sendAndAwait(
-    { type: "init", total, framesPerImage },
+    { type: "init", total, framesPerImage, vfChain: request.vfChain },
     "ready",
   );
 

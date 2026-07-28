@@ -50,6 +50,13 @@ export interface RenderRequest {
    * V1 callers leave it undefined.
    */
   extraDraw?: ExtraDrawFn;
+  /**
+   * Optional FFmpeg `-vf` chain. When set, replaces the default
+   * `scale=...` filter. The V2.5 engine composes a chain from the
+   * selected theme (or transition + filter). V1 callers leave
+   * it undefined and the worker uses its default.
+   */
+  vfChain?: string;
 }
 
 /** A function that draws onto the host canvas after the V1 frame
@@ -102,33 +109,7 @@ export function totalFrames(entries: RenderEntry[], speed: RenderSpeed): number 
   return entries.length * frameCountForSpeed(speed);
 }
 
-// describeError: produce a single diagnostic string from any thrown
-// value. The previous fallback to the literal "Render failed" string
-// hid empty-message rejections. Concatenating every useful property
-// gives the user (and our remote debugging) the real cause.
-function describeError(err: unknown): string {
-  if (err instanceof Error) {
-    const parts: string[] = [];
-    if (err.name && err.name !== "Error") parts.push(`[${err.name}]`);
-    if (err.message) parts.push(err.message);
-    if (err.stack) parts.push(`(${err.stack.split("\n")[0]})`);
-    if (parts.length === 0) {
-      try {
-        parts.push(`unknown Error: ${JSON.stringify(err)}`);
-      } catch {
-        parts.push("unknown Error (not serializable)");
-      }
-    }
-    return parts.join(" ");
-  }
-  if (typeof err === "string") return err;
-  if (err === null || err === undefined) return "Unknown error (no details)";
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return String(err);
-  }
-}
+// Re-export the helpers used by tests.
 
 let _ffmpeg: FFmpeg | null = null;
 
@@ -202,9 +183,17 @@ async function encode(
   total: number,
   post: (m: WorkerOut) => void,
   filename: string,
+  vfChain?: string,
 ): Promise<{ blob: Blob; filename: string }> {
   const ffmpeg = await ensureFfmpeg((m) => post({ type: "log", message: m }));
   const outName = "out.mp4";
+
+  // V2.5 — the engine may pass a custom vfChain (composed from
+  // the selected theme / transition / filter). The default
+  // remains the V1 letterbox scale so V1 callers are unaffected.
+  const vf = vfChain && vfChain.trim().length > 0
+    ? vfChain
+    : `scale=${FRAME_W}:${FRAME_H}`;
 
   await ffmpeg.exec([
     "-framerate",
@@ -212,7 +201,7 @@ async function encode(
     "-i",
     "frame_%03d.png",
     "-vf",
-    `scale=${FRAME_W}:${FRAME_H}`,
+    vf,
     "-r",
     String(FPS),
     "-c:v",
@@ -262,6 +251,7 @@ if (
   // Module-scoped state populated by the first `init` message.
   let total = 0;
   let framesPerImage = 1;
+  let vfChain: string | undefined;
 
   self.onmessage = async (e: MessageEvent) => {
     const data = e.data as {
@@ -274,72 +264,75 @@ if (
       framesPerImage?: number;
       coreURL?: string;
       wasmURL?: string;
+      vfChain?: string;
     };
     if (!data || !data.type) {
       post({ type: "error", message: "Unknown render message" });
       return;
     }
-
-    try {
-      if (data.type === "init") {
-        total = data.total ?? 0;
-        framesPerImage = data.framesPerImage ?? 1;
-        // Eagerly load FFmpeg so CDN errors surface during init with
-        // a clear message, instead of failing mid-render.
-        await initFfmpegEager(post, data.coreURL, data.wasmURL);
-        post({ type: "ready" });
+    if (data.type === "init") {
+      if (typeof data.total !== "number") {
+        post({ type: "error", message: "init requires total" });
         return;
       }
-
-      if (data.type === "frame") {
-        const ffmpeg = await ensureFfmpeg((m) =>
-          post({ type: "log", message: m }),
-        );
-        if (
-          typeof data.idx !== "number" ||
-          typeof data.frameIdx !== "number" ||
-          !(data.png instanceof Uint8Array)
-        ) {
-          post({ type: "error", message: "frame message missing fields" });
-          return;
-        }
-        // Sequential frame_NNN.png naming so the image2 demuxer can
-        // pick them up via the frame_%03d.png glob pattern. The
-        // orchestrator sends frames in strict (idx, frameIdx) order
-        // so seq = idx * framesPerImage + frameIdx is monotonic.
-        const seq = data.idx * framesPerImage + data.frameIdx;
-        const fname = `frame_${String(seq).padStart(3, "0")}.png`;
-        await ffmpeg.writeFile(fname, data.png);
-        post({
-          type: "progress",
-          progress: {
-            phase: "rendering",
-            completed: data.idx * framesPerImage + data.frameIdx + 1,
-            total,
-          },
-        });
-        post({ type: "frame-done", idx: data.idx, frameIdx: data.frameIdx });
-        return;
+      total = data.total;
+      if (typeof data.framesPerImage === "number") {
+        framesPerImage = data.framesPerImage;
       }
-
-      if (data.type === "encode") {
-        if (typeof data.filename !== "string") {
-          post({ type: "error", message: "encode requires filename" });
-          return;
-        }
-        post({
-          type: "progress",
-          progress: { phase: "finalizing", completed: total, total },
-        });
-        const result = await encode(total, post, data.filename);
-        post({ type: "success", blob: result.blob, filename: result.filename });
-        return;
+      if (typeof data.vfChain === "string") {
+        vfChain = data.vfChain;
       }
-
-      post({ type: "error", message: `Unknown message type: ${data.type}` });
-    } catch (err) {
-      post({ type: "error", message: describeError(err) });
+      // Eagerly load FFmpeg so CDN errors surface during init with
+      // a clear message rather than at the encode step.
+      await initFfmpegEager(post, data.coreURL, data.wasmURL);
+      post({ type: "ready" });
+      return;
     }
+    if (data.type === "frame") {
+      const ffmpeg = await ensureFfmpeg((m) =>
+        post({ type: "log", message: m }),
+      );
+      if (
+        typeof data.idx !== "number" ||
+        typeof data.frameIdx !== "number" ||
+        !(data.png instanceof Uint8Array)
+      ) {
+        post({ type: "error", message: "frame message missing fields" });
+        return;
+      }
+      // Sequential frame_NNN.png naming so the image2 demuxer can
+      // pick them up via the frame_%03d.png glob pattern. The
+      // orchestrator sends frames in strict (idx, frameIdx) order
+      // so seq = idx * framesPerImage + frameIdx is monotonic.
+      const seq = data.idx * framesPerImage + data.frameIdx;
+      const fname = `frame_${String(seq).padStart(3, "0")}.png`;
+      await ffmpeg.writeFile(fname, data.png);
+      post({
+        type: "progress",
+        progress: {
+          phase: "rendering",
+          completed: data.idx * framesPerImage + data.frameIdx + 1,
+          total,
+        },
+      });
+      post({ type: "frame-done", idx: data.idx, frameIdx: data.frameIdx });
+      return;
+    }
+    if (data.type === "encode") {
+      if (typeof data.filename !== "string") {
+        post({ type: "error", message: "encode requires filename" });
+        return;
+      }
+      post({
+        type: "progress",
+        progress: { phase: "finalizing", completed: total, total },
+      });
+      const result = await encode(total, post, data.filename, vfChain);
+      post({ type: "success", blob: result.blob, filename: result.filename });
+      return;
+    }
+
+    post({ type: "error", message: `Unknown message type: ${data.type}` });
   };
 
   (self as unknown as Worker).postMessage({

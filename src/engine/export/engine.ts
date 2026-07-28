@@ -23,10 +23,11 @@ import { getDb } from "../../db/database";
 import {
   type DateRange,
   type ExportProgress,
-  type ExportRequest,
+  type ExportRequestV2,
   type ExportResult,
 } from "../state";
 import { applyWatermark, shouldApplyWatermark } from "./watermark";
+import { composeVfChain, resolveSpeed } from "../themes";
 
 /** Pull the entries for a subject within a date range, sorted
  *  oldest-first (the V1 export expects chronological order). */
@@ -93,13 +94,31 @@ function speedToSeconds(speed: "fast" | "standard" | "slow"): 0.25 | 0.5 | 0.8 {
 }
 
 /** Run the V2 export pipeline. Pure async function — caller is the
- *  engine method. */
+ *  engine method. Accepts the V2.5 `ExportRequestV2` shape (the V2
+ *  `ExportRequest` is a structural subset, so V2 callers continue
+ *  to work). The optional `theme` / `transition` / `filter` fields
+ *  are Studio-only; free and clean callers leave them unset. */
 export async function runExport(
-  request: ExportRequest,
+  request: ExportRequestV2,
   unlockState: "free" | "clean" | "studio",
   onProgress: (p: ExportProgress) => void,
 ): Promise<ExportResult> {
   const start = Date.now();
+
+  // V2.5 — compose the FFmpeg `-vf` chain. Theme takes precedence
+  // over transition + filter (kickoff §Day 7). The chain is
+  // always non-empty: the V1 letterbox scale is the prefix.
+  const vfChain = composeVfChain({
+    theme: request.theme,
+    transition: request.transition,
+    filter: request.filter,
+  });
+  // Resolve the render speed: a theme pins the speed; otherwise
+  // the user's pick survives.
+  const resolvedSpeed = resolveSpeed({
+    theme: request.theme,
+    speed: request.speed,
+  });
 
   // Phase 1: preparing — load entries + assets from IDB.
   onProgress({ phase: "preparing", ratio: 0, message: "Loading photos…" });
@@ -174,9 +193,13 @@ export async function runExport(
       width: e.width,
       height: e.height,
     })),
-    speedSeconds: speedToSeconds(request.speed),
+    speedSeconds: speedToSeconds(resolvedSpeed),
     showDates: request.showDate,
     exportFilename: filename,
+    // V2.5 — the engine-composed FFmpeg -vf chain. V1 callers
+    // (request has no theme/transition/filter) get the default
+    // V1 letterbox scale.
+    vfChain,
     // Per-frame hook: draws the watermark on the canvas before PNG
     // encoding. Runs on the main thread; the worker only sees the
     // resulting bytes. Only wired in for free-tier exports; Clean
