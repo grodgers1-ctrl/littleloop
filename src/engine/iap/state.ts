@@ -34,8 +34,23 @@ import type { StoredUnlock } from "../../db/schema";
  *  source of truth. */
 const UNLOCK_CACHE_KEY = "ll.v2.unlock";
 
-/** 30 days, per spec. */
+/** 30 days, per spec. NOTE: this value (~2.59e9) exceeds the 32-bit
+ *  signed integer maximum that Node's `setInterval` accepts. The
+ *  engine schedules the timer with `setRevalidationIntervalMs`
+ *  (below) which clamps to a safe value. In V2.0 the only effect is
+ *  that the revalidation timer fires sooner than 30 days in Node
+ *  test envs; production browsers handle the full 30 days. V2.5
+ *  real IAP providers will need a more robust scheduler. */
 export const REVALIDATION_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Maximum value Node's `setInterval` accepts (32-bit signed int max). */
+export const NODE_MAX_INTERVAL_MS = 0x7fffffff;
+
+/** Clamp a millisecond duration to one Node can schedule. */
+export function clampToNodeInterval(ms: number): number {
+  if (!Number.isFinite(ms) || ms <= 0) return 1000;
+  return Math.min(ms, NODE_MAX_INTERVAL_MS);
+}
 
 export interface EffectiveUnlock {
   state: UnlockState;

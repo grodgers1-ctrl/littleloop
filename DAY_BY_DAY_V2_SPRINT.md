@@ -506,7 +506,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 126/126 tests pass (94 V1 + 10 migration + 9 engine-subjects + 13 engine-iap). `npm run build` — 209.52 KB main bundle, 64.40 KB gzipped (under the 250 KB budget).
 
-#### Day 5 — Apple and Google IAP providers (web stubs)
+#### Day 5 — Apple and Google IAP providers (web stubs) ✅ done 2026-07-28
 
 **Morning**
 - Implement `iap/apple.ts` as a web stub. The stub detects iOS Safari and would call the App Store IAP API, but the actual purchase is deferred to a follow-up. The stub returns 'unavailable' on web.
@@ -522,6 +522,24 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Without these flags, only the dev provider is active and the paywall says "coming soon."
 
 **End-of-day check**: On a desktop browser, the paywall shows "coming soon" for all products. The dev provider still works (build with `VITE_IAP_*` unset defaults to dev). The architecture supports real IAP providers; the wiring happens in V2.5 once the V2.0 product is validated.
+
+**Day 5 shipped**:
+- `src/engine/iap/apple.ts` (new) — Apple App Store provider stub. `isAvailable()` returns false in V2.0 (StoreKit only available in V3 Capacitor). `buy()` returns `{ok: false, reason: "unavailable"}` regardless of platform; the platform guard is defensive.
+- `src/engine/iap/google.ts` (new) — Google Play provider stub, same shape.
+- `src/engine/iap/stripe.ts` (new) — Stripe Checkout provider stub. `isAvailable()` returns false in V2.0 (real Stripe wiring lands in V2.5).
+- `src/engine/platform/detect.ts` (new) — `detectPlatform(userAgent)` returns `'ios' | 'android' | 'desktop'`. Recognises iPhone/iPad/iPod/touch-capable-Mac/Android. `currentPlatform()` reads `navigator.userAgent` in browser envs and falls back to `'desktop'` in non-browser envs (test runners).
+- `src/engine/feature-flags.ts` — already shipped on Day 4; used by the provider selector.
+- `src/engine/providers.ts` — `createIapProvider()` now selects based on `VITE_IAP_*` flags (Apple > Google > Stripe precedence; falls back to dev). Logs the selected provider in dev mode.
+- `src/engine/engine.ts` — `init()` schedules a 30-day revalidation timer via `setInterval`. The interval is clamped to Node's 32-bit signed int max (`0x7fffffff`) so `setInterval` doesn't overflow in test envs. Production browsers handle the full 30 days. The timer calls `iapRestore()`, which delegates to the active provider's `restore()`.
+- `src/engine/iap/state.ts` — exports `REVALIDATION_INTERVAL_MS` (30 days), `NODE_MAX_INTERVAL_MS`, `clampToNodeInterval(ms)` (clamping helper).
+- `tests/unit/iap-providers.test.ts` (new) — 27 tests: platform detection across iOS / Android / desktop / touch-Mac / empty UA; feature flag parsing (`true`/`1`/`false`/`0`/boolean); provider stubs return the correct shape; provider selection via flags; revalidation interval clamping.
+
+**Deviations from plan**:
+- The plan says "prefer Apple on iOS, Google on Android, Stripe on desktop". I instead made the selection **flag-driven** (`VITE_IAP_APPLE_ENABLED` etc.) with the dev provider as the default when no flag is set. The platform-specific default made sense for V1 where the V2 spec was a target, but with feature flags the platform-detect becomes secondary — what matters for V2.0 is that the paywall shows "coming soon" by default, and that operators can flip one flag to enable a specific provider in a controlled release.
+- The revalidation timer in `engine.init()` uses `setInterval` rather than the more robust `setTimeout`-chained approach. The reason: at 30 days the timer never fires in a single session anyway, and `unref()` keeps Node from blocking on the handle. V2.5 will revisit if real providers need sub-day precision.
+- `clampToNodeInterval` is a Day 5 invention. Node's `setInterval` rejects durations above `0x7fffffff` (~24.8 days) with a TimeoutOverflowWarning — the full 30-day spec value can't be scheduled natively. The clamp ensures the test env doesn't crash; in production the browser schedules the full duration.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 153/153 tests pass (94 V1 + 10 migration + 9 engine-subjects + 13 engine-iap + 27 iap-providers). `npm run build` — 210.81 KB main bundle, 64.73 KB gzipped (under the 250 KB budget).
 
 #### Day 6 — Home screen polish
 

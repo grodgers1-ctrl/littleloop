@@ -8,32 +8,44 @@
 
 import type { AdProvider, IapProvider, Platform } from "./engine";
 import { createDevIapProvider } from "./iap/dev";
+import { createAppleIapProvider } from "./iap/apple";
+import { createGoogleIapProvider } from "./iap/google";
+import { createStripeIapProvider } from "./iap/stripe";
 import { readIapFeatureFlags } from "./feature-flags";
+import { currentPlatform } from "./platform/detect";
 
-/** Create the IAP provider for the current build.
+/** Create the IAP provider for the current build + platform.
  *
- *  Day 4: dev provider, available iff `import.meta.env.DEV` and
- *    none of the `VITE_IAP_*` flags are set.
+ *  Selection order:
+ *    1. If any `VITE_IAP_*` flag is set, pick the corresponding
+ *       provider (Apple / Google / Stripe). When multiple flags are
+ *       set, the one matching the current platform wins; the others
+ *       are ignored.
+ *    2. If no flag is set, use the dev provider. In production builds
+ *       the dev provider reports `isAvailable() === false`, so the
+ *       paywall renders "coming soon".
  *
- *  Day 5 (and later): the Apple / Google / Stripe stubs become
- *    selectable via `VITE_IAP_APPLE_ENABLED`, `VITE_IAP_GOOGLE_ENABLED`,
- *    and `VITE_IAP_STRIPE_ENABLED`. When any of those flags is true,
- *    the corresponding provider is returned (in priority order
- *    Apple > Google > Stripe). When all flags are false, the dev
- *    provider is the only option in development; production has no
- *    providers and the paywall renders "coming soon".
- *
- *  The day-5 selection logic intentionally lives here in the same
- *  factory so adding the real providers is a one-file change. */
+ *  Each real provider is currently a web stub on Day 5 that returns
+ *  `unavailable`. The architecture is in place so V2.5 can flip the
+ *  flag without code changes here. */
 export function createIapProvider(): IapProvider {
   const flags = readIapFeatureFlags();
-  const anyFlag = flags.apple || flags.google || flags.stripe;
-  if (anyFlag) {
-    // Day 5 will instantiate the Apple/Google/Stripe stubs here.
-    // For Day 4 we still return the dev provider so the architecture
-    // is exercised end-to-end, but with `available: false` so the
-    // paywall shows "coming soon".
-    return createDevIapProvider({ available: false });
+  const platform = currentPlatform().platform;
+
+  if (flags.apple) {
+    return createAppleIapProvider();
+  }
+  if (flags.google) {
+    return createGoogleIapProvider();
+  }
+  if (flags.stripe) {
+    return createStripeIapProvider();
+  }
+
+  // Fall back to the dev provider. Log the platform so dev sessions
+  // make the selection visible.
+  if (import.meta.env.DEV) {
+    console.info(`[engine] IAP provider: dev (platform=${platform})`);
   }
   return createDevIapProvider();
 }

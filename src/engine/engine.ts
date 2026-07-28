@@ -50,7 +50,11 @@ import {
   runSandboxV1ToV2Migration,
   runV1ToV2Migration,
 } from "../db/migrations/v1-to-v2";
-import { loadEffectiveUnlock } from "./iap/state";
+import {
+  clampToNodeInterval,
+  loadEffectiveUnlock,
+  REVALIDATION_INTERVAL_MS,
+} from "./iap/state";
 import type { IapProvider } from "./iap/provider";
 
 // Re-export so consumers can `import { IapProvider } from "./engine"`.
@@ -87,6 +91,9 @@ export class Engine {
   private unlock: UnlockState = "free";
   private exportProgress: ExportProgress | null = null;
   private ready = false;
+  /** Handle for the periodic IAP revalidation timer. Node `Timeout`
+   *  in tests, `number` in browsers. We type it loosely. */
+  private revalidationTimer: ReturnType<typeof setInterval> | null = null;
 
   /** Set on `init()` to expose the active IAP provider to the React layer. */
   readonly iap: IapProvider;
@@ -133,14 +140,35 @@ export class Engine {
     // After migration, seed the in-memory subject cache.
     const subjects = await repoListSubjects();
     this.setSubjects(subjects);
-    // Day 4: load the unlock state from IndexedDB. The 30-day
-    // revalidation timer is wired in Day 5 once the Apple/Google
-    // providers exist; the dev provider always validates.
+    // Day 4: load the unlock state from IndexedDB.
     const effective = await loadEffectiveUnlock();
     this.setUnlockState(effective.state);
+    // Day 5: schedule the 30-day revalidation timer. Each tick calls
+    // `iapRestore()`, which delegates to the active provider's
+    // restore() — for the dev provider this is a no-op IDB read; for
+    // real Apple/Google/Stripe providers (V2.5) this hits the
+    // store's API and revokes unlocks whose receipts no longer
+    // validate. The handle is stored so the engine can be disposed
+    // cleanly (e.g. in test teardown).
+    this.startRevalidationTimer();
     // Day 6 initialises the ad provider.
     this.ready = true;
     this.emit({ type: "ready" });
+  }
+
+  /** Schedule the 30-day revalidation timer. Idempotent. */
+  private startRevalidationTimer(): void {
+    if (this.revalidationTimer != null) return;
+    if (typeof setInterval !== "function") return; // non-browser envs
+    const intervalMs = clampToNodeInterval(REVALIDATION_INTERVAL_MS);
+    this.revalidationTimer = setInterval(() => {
+      void this.iapRestore().catch((err: unknown) => {
+        console.error("[engine] periodic IAP revalidation failed:", err);
+      });
+    }, intervalMs);
+    // Allow the Node process to exit without waiting for this interval.
+    const t = this.revalidationTimer as unknown as { unref?: () => void };
+    if (typeof t.unref === "function") t.unref();
   }
 
   isReady(): boolean {
