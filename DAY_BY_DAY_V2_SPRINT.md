@@ -671,7 +671,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 181/181 tests pass. `npm run build` — 213.16 KB main bundle, 65.74 KB gzipped (under 250 KB budget).
 
-#### Day 10 — Camera roll save
+#### Day 10 — Camera roll save ✅ done 2026-07-28
 
 **Morning**
 - Implement `engine/platform/camera-roll.ts` for the browser. The browser implementation:
@@ -685,6 +685,20 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Test on desktop Chrome to verify the download fallback.
 
 **End-of-day check**: Tapping "Save to Photos" on iOS opens the share sheet. The user can save to Photos. On desktop, the file downloads with the correct filename.
+
+**Day 10 shipped**:
+- `src/engine/platform/browser.ts` (new) — full browser `Platform` implementation. `saveToCameraRoll`: tries Web Share API with a `File` object first (opens the iOS share sheet where "Save to Photos" is available), falls back to `<a download>` anchor click. `share`: uses Web Share API with file support, returns `{unavailable}` when absent. `saveToFiles`: anchor-click download. `pickFile`: hidden `<input type="file">` with blur-based cancellation heuristic.
+- `src/engine/providers.ts` — `createBrowserPlatform` renamed to `createPlatform` (the stub is replaced by the real module). Imports and delegates to `createBrowserPlatform` from `./platform/browser`.
+- `src/engine/engine.ts` — `engine.saveToCameraRoll` and `engine.share` now delegate to `engine.platform` instead of throwing "not implemented".
+- `src/main.tsx` — switched from `createBrowserPlatform()` to `createPlatform()`.
+- `tests/unit/browser-platform.test.ts` (new) — 6 tests: download fallback, anchor element DOM creation, Web Share API happy path, share cancellation, saveToFiles download trigger.
+
+**Deviations from plan**:
+- The plan calls for a separate `engine/platform/camera-roll.ts` file. I put the camera-roll logic inside `engine/platform/browser.ts` as part of the cohesive `Platform` implementation. Splitting into separate files would add an indirection layer for no benefit — the browser platform is a single module.
+- The "help text under the button" is implemented in the day 9 `ExportResultScreen` (`saveError` state). When the download fallback is used, it already shows "Saved as a download. On iPhone, open the share sheet and pick 'Save to Photos'." The plan's afternoon was already delivered by the Day 9 result screen wiring.
+- The Playwright iOS Safari test is deferred to Day 19's regression sweep (same reason as Day 7's e2e: requires the preview server and specific hardware).
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 187/187 tests pass (181 baseline + 6 browser platform). `npm run build` — 214.28 KB main bundle, 66.04 KB gzipped (under 250 KB budget).
 
 #### Day 11 — Share intents
 

@@ -15,13 +15,13 @@ import "./styles/globals.css";
 import { Engine, setEngine } from "./engine";
 import {
   createAdProvider,
-  createBrowserPlatform,
   createIapProvider,
+  createPlatform,
 } from "./engine/providers";
 
 const engine = new Engine({
   iap: createIapProvider(),
-  platform: createBrowserPlatform(),
+  platform: createPlatform(),
   ads: createAdProvider(),
 });
 setEngine(engine);

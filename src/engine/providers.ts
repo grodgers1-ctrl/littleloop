@@ -14,6 +14,7 @@ import { createStripeIapProvider } from "./iap/stripe";
 import { readIapFeatureFlags } from "./feature-flags";
 import { currentPlatform } from "./platform/detect";
 import { createPlaceholderAdProvider } from "./ads/placeholder";
+import { createBrowserPlatform } from "./platform/browser";
 
 /** Create the IAP provider for the current build + platform.
  *
@@ -51,18 +52,10 @@ export function createIapProvider(): IapProvider {
   return createDevIapProvider();
 }
 
-/** Stub platform adapter. Day 10 implements camera-roll, Day 11
+/** Browser platform adapter. Day 10 implements camera-roll, Day 11
  *  implements share, Day 12 implements file-system. */
-export function createBrowserPlatform(): Platform {
-  return {
-    share: (_blob: Blob, _filename: string, _options): Promise<{ shared: false; reason: "cancelled" | "unavailable" }> =>
-      Promise.resolve({ shared: false, reason: "unavailable" }),
-    saveToCameraRoll: (_blob: Blob, _filename: string): Promise<boolean> =>
-      Promise.resolve(false),
-    saveToFiles: (_blob: Blob, _filename: string, _mimeType: string): Promise<boolean> =>
-      Promise.resolve(false),
-    pickFile: (_accept: string): Promise<File | null> => Promise.resolve(null),
-  };
+export function createPlatform(): Platform {
+  return createBrowserPlatform();
 }
 
 /** Ad provider. Day 6 implements the placeholder banner with a

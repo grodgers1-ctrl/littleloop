@@ -372,16 +372,16 @@ export class Engine {
     return runExportEngine(request, this.getUnlockState(), forward);
   }
 
-  async saveToCameraRoll(_blob: Blob, _filename: string): Promise<boolean> {
-    throw new Error("Engine.saveToCameraRoll not implemented (Day 10)");
+  async saveToCameraRoll(blob: Blob, filename: string): Promise<boolean> {
+    return this.platform.saveToCameraRoll(blob, filename);
   }
 
   async share(
-    _blob: Blob,
-    _filename: string,
-    _options: ShareOptions,
+    blob: Blob,
+    filename: string,
+    options: ShareOptions,
   ): Promise<ShareResult> {
-    throw new Error("Engine.share not implemented (Day 11)");
+    return this.platform.share(blob, filename, options);
   }
 
   async backupToFile(): Promise<File> {
