@@ -16,6 +16,7 @@ import {
   replaceEntry,
 } from "../timeline/entry-service";
 import { findEntryForPeriod } from "../../db/repositories";
+import { readExifDate, type ExifResult } from "../../engine/exif";
 import type { Route } from "../../app/routes";
 
 interface Props {
@@ -43,10 +44,41 @@ export function ImportDateScreen({
   const [date, setDate] = useState(suggestedDate);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // V2.5 — EXIF-detected date. Set on mount; if a valid date
+  // comes back, we pre-fill the input with it (only when the
+  // caller-supplied `suggestedDate` is the default "today" —
+  // never override an explicit caller choice).
+  const [exifDate, setExifDate] = useState<ExifResult | null>(null);
 
   useEffect(() => {
     return () => URL.revokeObjectURL(previewUrl);
   }, [previewUrl]);
+
+  // V2.5 — read EXIF on mount. Best-effort: any error leaves
+  // `exifDate` at null and the user keeps the default.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await readExifDate(blob);
+        if (cancelled) return;
+        if (!result) return;
+        setExifDate(result);
+        // Only pre-fill if the caller's suggested date is the
+        // default (today) — never override an explicit caller
+        // choice (e.g. the replace flow passes the existing
+        // entry's date).
+        if (suggestedDate === todayDateOnly()) {
+          setDate(result.date);
+        }
+      } catch {
+        /* best-effort: swallow */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [blob, suggestedDate]);
 
   const periodKey =
     project.cadence === "weekly"
@@ -117,6 +149,15 @@ export function ImportDateScreen({
           <div className="ll-field-help">
             Imported photos let you backfill older moments.
           </div>
+          {exifDate ? (
+            <div className="ll-field-help ll-field-help-exif" data-testid="exif-hint">
+              Photo taken {exifDate.date}
+              {exifDate.source === "DateTimeOriginal"
+                ? " (from EXIF DateTimeOriginal)"
+                : " (from EXIF DateTime)"}
+              . You can override the date above.
+            </div>
+          ) : null}
         </div>
         {error ? (
           <div className="ll-status ll-status-error" role="alert">

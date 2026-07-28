@@ -851,3 +851,10 @@ img {
   margin-top: 8px;
   width: 100%;
 }
+
+.ll-field-help-exif {
+  margin-top: 4px;
+  color: var(--ll-accent, #2563eb);
+  font-size: 12px;
+  font-weight: 500;
+}
