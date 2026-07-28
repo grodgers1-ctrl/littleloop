@@ -35,7 +35,15 @@ import type {
   UnlockState,
 } from "./state";
 import type { Cadence } from "../db/schema";
-import { listSubjects } from "../db/repositories";
+import {
+  createSubject as repoCreateSubject,
+  deleteSubject as repoDeleteSubject,
+  listSubjects as repoListSubjects,
+  newProjectId as repoNewProjectId,
+  updateProject as repoUpdateProject,
+  updateSubject as repoUpdateSubject,
+} from "../db/repositories";
+import { getDb } from "../db/database";
 import {
   runSandboxV1ToV2Migration,
   runV1ToV2Migration,
@@ -125,7 +133,7 @@ export class Engine {
       );
     }
     // After migration, seed the in-memory subject cache.
-    const subjects = await listSubjects();
+    const subjects = await repoListSubjects();
     this.setSubjects(subjects);
     // Day 4 loads the unlock state from IndexedDB and starts the
     //   30-day revalidation timer.
@@ -179,37 +187,106 @@ export class Engine {
   // -------------------------------------------------------------------------
 
   async listSubjects(): Promise<Subject[]> {
-    // Day 3 reads from `db.subjects`. For Day 1 we return the
-    // in-memory cache (which stays empty until Day 2's migration
-    // populates it).
-    return [...this.subjects];
+    const subjects = await repoListSubjects();
+    this.setSubjects(subjects);
+    return subjects;
   }
 
   /** Synchronous snapshot for `useSyncExternalStore`. Mirrors the
-   *  current in-memory subject list. Day 3 will keep this in sync
-   *  with IndexedDB via the subjects-changed event. */
+   *  current in-memory subject list. The cache is kept in sync via
+   *  `setSubjects()` (called by `init()` and by every mutating
+   *  subject method). */
   listSubjectsSync(): Subject[] {
     return [...this.subjects];
   }
 
-  async createSubject(_input: CreateSubjectInput): Promise<Subject> {
-    throw new Error("Engine.createSubject not implemented (Day 3)");
+  async createSubject(input: CreateSubjectInput): Promise<Subject> {
+    // The V1 engine path's home screen reads from the `projects`
+    // table. To keep V1 callers coherent when a V2 subject is added,
+    // we also write a parallel Project row. Both rows share the
+    // same id so existing entry queries (which key on projectId ==
+    // subject id) resolve correctly. The V1 Project gets the legacy
+    // shape: `childName` mirrors the V2 `name`, `dateOfBirth` is
+    // empty string (V1 needs a DOB; we don't have one for non-baby
+    // subjects), `cadence` mirrors V2.
+    const subject = await repoCreateSubject({
+      ...input,
+      name: input.name.trim(),
+    });
+    // Best-effort mirror into the V1 Project table. If it fails
+    // (quota, etc.) the V2 Subject still exists; V1 callers will
+    // not see the subject, but Day 7 will replace the V1 home with
+    // the V2 home, so this is bounded risk.
+    try {
+      await getDb().projects.add({
+        id: subject.id,
+        childName: subject.name,
+        dateOfBirth: "",
+        cadence: subject.cadence,
+        createdAt: subject.createdAt,
+        updatedAt: subject.updatedAt,
+      });
+    } catch (err) {
+      console.warn(
+        "[engine] could not mirror new subject into V1 Project table:",
+        err,
+      );
+    }
+    // Refresh the in-memory cache and notify.
+    const all = await repoListSubjects();
+    this.setSubjects(all);
+    // repoNewProjectId is unused on the V2 path; the import keeps
+    // the tree-shaker honest about which V1 helpers remain live.
+    void repoNewProjectId;
+    return subject;
   }
 
-  async deleteSubject(_id: string): Promise<void> {
-    throw new Error("Engine.deleteSubject not implemented (Day 3)");
+  async deleteSubject(id: string): Promise<void> {
+    await repoDeleteSubject(id);
+    const all = await repoListSubjects();
+    this.setSubjects(all);
   }
 
-  async renameSubject(_id: string, _name: string): Promise<void> {
-    throw new Error("Engine.renameSubject not implemented (Day 3)");
+  async renameSubject(id: string, name: string): Promise<void> {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error("Subject name cannot be empty");
+    if (trimmed.length > 60) {
+      throw new Error("Subject name must be 60 characters or fewer");
+    }
+    await repoUpdateSubject(id, { name: trimmed });
+    // Mirror to V1 so V1 callers reading `Project.childName` see the
+    // new name. Failure is logged, not thrown — V2 is the source of
+    // truth from Day 7 onward.
+    try {
+      await repoUpdateProject(id, { childName: trimmed });
+    } catch (err) {
+      console.warn(
+        "[engine] could not mirror subject rename into V1 Project table:",
+        err,
+      );
+    }
+    const all = await repoListSubjects();
+    this.setSubjects(all);
   }
 
-  async reclassifySubject(_id: string, _type: SubjectType): Promise<void> {
-    throw new Error("Engine.reclassifySubject not implemented (Day 3)");
+  async reclassifySubject(id: string, type: SubjectType): Promise<void> {
+    await repoUpdateSubject(id, { type });
+    const all = await repoListSubjects();
+    this.setSubjects(all);
   }
 
-  async setSubjectCadence(_id: string, _cadence: Cadence): Promise<void> {
-    throw new Error("Engine.setSubjectCadence not implemented (Day 3)");
+  async setSubjectCadence(id: string, cadence: Cadence): Promise<void> {
+    await repoUpdateSubject(id, { cadence });
+    try {
+      await repoUpdateProject(id, { cadence });
+    } catch (err) {
+      console.warn(
+        "[engine] could not mirror subject cadence into V1 Project table:",
+        err,
+      );
+    }
+    const all = await repoListSubjects();
+    this.setSubjects(all);
   }
 
   // -------------------------------------------------------------------------

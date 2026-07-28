@@ -52,3 +52,6 @@ export type {
   EngineEventHandler,
   EngineFeatureFlags,
 } from "./state";
+// Router + V2Splash are imported directly from their files to keep
+// the engine barrel free of mixed component / non-component exports,
+// which trips the react-refresh lint rule.

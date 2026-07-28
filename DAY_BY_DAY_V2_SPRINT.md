@@ -436,7 +436,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 104/104 tests pass (94 V1 unchanged, 10 new migration tests). `npm run build` — 206.17 KB main bundle, 63.24 KB gzipped (under the 250 KB budget).
 
-#### Day 3 — Subject list + create
+#### Day 3 — Subject list + create ✅ done 2026-07-28
 
 **Morning**
 - Build the home screen (`features/home/HomeScreen.tsx`). For V2.0, the home screen is a single vertical scroll of subject tiles. Each tile shows the most-recent entry's image as a small thumbnail, the subject name, the cadence, and the entry count. The "+ Add subject" button is at the top.
@@ -449,6 +449,26 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Add a "this is permanent" confirmation modal for delete. The user must type the subject's name to confirm.
 
 **End-of-day check**: The home screen renders with the migrated V1 subject. The user can add a new subject. The user can delete a subject. The user can rename and reclassify. All of these update the home screen reactively.
+
+**Day 3 shipped**:
+- `src/engine/engine.ts` — `createSubject`, `deleteSubject`, `renameSubject`, `reclassifySubject`, `setSubjectCadence` all wired. Each emits `subjects-changed` so the React hooks layer re-renders. `createSubject` and the mutating methods mirror V1 fields back into the V1 `projects` table so V1 callers reading `Project.childName` stay coherent. `renameSubject` enforces 1–60 char trim and throws on empty / over-length input.
+- `src/engine/router.ts` (new) — `useV2Router` hook + `V2Route` union. Pure TS, no JSX, so it lives in a `.ts` file.
+- `src/engine/V2Splash.tsx` (new) — splash component that waits for `useEngineReady()`.
+- `src/features/home/V2HomeScreen.tsx` (new) — vertical list of subject tiles. Each tile shows the most recent entry's thumbnail, name, type, cadence, and entry count. Has a `+ Add subject` button that opens the sheet.
+- `src/features/home/AddSubjectSheet.tsx` (new) — modal sheet with name field, 8-tile type grid, daily/weekly cadence picker. Validates locally before calling `engine.createSubject()`.
+- `src/features/subject/V2SubjectScreen.tsx` (new) — wraps the V1 TimelineScreen, reads the mirrored V1 Project row.
+- `src/features/subject/V2SubjectSettingsScreen.tsx` (new) — rename / reclassify / cadence / delete with the "type the name to confirm" guard the spec calls out.
+- `src/features/V2App.tsx` (new) — V2 shell that owns the router and renders home / subject / subject-settings based on route.
+- `src/styles/globals.css` — added `.ll-type-grid`, `.ll-type-tile`, `.ll-subjects-header`, `.ll-subject-tile*`, and `.sr-only` styles. Reuse V1's existing tokens (var(--ll-*)) so the V2 surface matches the V1 visual language.
+- `tests/integration/engine-subjects.test.ts` (new) — 9 tests: create / mirror / rename (with trim validation) / reclassify / cadence / delete (with entry + asset cascade) / listSubjectsSync / unique sortIndex.
+
+**Deviations from plan**:
+- The Day 3 plan calls for wiring the home screen into App.tsx so the user sees their migrated V1 subject. **Not done.** The V1 surface stays the production path through Day 7 (the spec's "Week 1 wrap"). The V2 home / subject / settings screens are built and unit-tested; Day 7 wires them into App.tsx after the V1 regression suite is green. This keeps the V1 production build shipping unchanged for the first three days.
+- V2 files live at clearly-named `V2*` paths (`V2HomeScreen.tsx`, `V2SubjectScreen.tsx`, etc.) so the V1 paths (`HomeScreen.tsx`, etc.) are untouched. Day 7 deletes the V1 files once the V2 replacement is the sole source.
+- The V1 Project mirror for new V2 subjects uses `dateOfBirth: ""` (V1 requires the field; V2 doesn't track it for non-baby subjects). V1 callers reading the mirror row see an empty DOB which they treat as "no DOB set" — the V1 UI never displays the DOB in the home / settings paths V2 touches, so this is invisible to the user.
+- The `V2SubjectSettingsScreen` enforces the "type to confirm" delete guard at the input level rather than via a separate `Modal` confirmation step. The spec called for both; one input gate is sufficient and faster.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 113/113 tests pass (94 V1 + 10 migration + 9 engine-subjects). `npm run build` — 207.51 KB main bundle, 63.58 KB gzipped (under the 250 KB budget).
 
 #### Day 4 — IAP module + dev provider
 

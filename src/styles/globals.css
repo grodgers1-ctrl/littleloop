@@ -446,3 +446,138 @@ img {
   width: 100%;
   border-radius: var(--ll-radius);
 }
+
+/* V2 — Subject type grid (8-tile picker). Used in AddSubjectSheet and
+   V2SubjectSettingsScreen. */
+.ll-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.ll-type-tile {
+  background: var(--ll-surface-soft);
+  border: 1px solid var(--ll-border);
+  border-radius: var(--ll-radius);
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ll-text);
+  font: inherit;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ll-type-tile:hover {
+  border-color: var(--ll-accent);
+}
+.ll-type-tile.is-active {
+  border-color: var(--ll-accent);
+  background: var(--ll-accent-soft);
+}
+.ll-type-tile-title {
+  font-weight: 600;
+}
+.ll-type-tile-hint {
+  font-size: 12px;
+  color: var(--ll-text-soft);
+}
+.ll-type-tile.is-active .ll-type-tile-hint {
+  color: var(--ll-text);
+}
+
+/* V2 — Subject home list */
+.ll-subjects-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.ll-subject-tile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ll-subject-tile {
+  background: var(--ll-surface);
+  border: 1px solid var(--ll-border);
+  border-radius: var(--ll-radius-lg);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  min-height: 80px;
+}
+.ll-subject-tile:hover {
+  border-color: var(--ll-accent);
+}
+.ll-subject-tile-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--ll-radius);
+  background: var(--ll-surface-soft);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ll-subject-tile-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ll-subject-tile-thumb-empty {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ll-text-soft);
+}
+.ll-subject-tile-body {
+  flex: 1;
+  min-width: 0;
+}
+.ll-subject-tile-name {
+  font-weight: 600;
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ll-subject-tile-meta {
+  font-size: 13px;
+  color: var(--ll-text-soft);
+  margin-top: 2px;
+}
+.ll-subject-tile-settings {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--ll-border);
+  border-radius: var(--ll-radius);
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--ll-text-soft);
+  font: inherit;
+  font-size: 13px;
+}
+.ll-subject-tile-settings:hover {
+  border-color: var(--ll-accent);
+  color: var(--ll-text);
+}
+
+/* Screen-reader-only utility. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
