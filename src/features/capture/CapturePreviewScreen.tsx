@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
+import { NoteEditor } from "../../components/NoteEditor";
 import type { Project } from "../../db/schema";
 import { findEntryForPeriod } from "../../db/repositories";
 import {
@@ -36,6 +37,8 @@ export function CapturePreviewScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isWeekly] = useState(project.cadence === "weekly");
+  // V2.5 — note attached to the new entry. Empty = no note.
+  const [note, setNote] = useState<string>("");
 
   // Revoke preview URL when we navigate away.
   useEffect(() => {
@@ -60,6 +63,10 @@ export function CapturePreviewScreen({
           entryId: replaceEntryId,
           processed,
         });
+        // Note updates for replaces go through engine.setEntryNote;
+        // a saved-then-edited flow would write twice. For V2.5 we
+        // skip the note when replacing (the user can edit from the
+        // timeline). Empty note is fine.
       } else {
         const existing = await findEntryForPeriod(project.id, periodKey);
         if (existing) {
@@ -74,6 +81,7 @@ export function CapturePreviewScreen({
             capturedDate: today,
             periodKey,
             processed,
+            note: note.trim().length > 0 ? note : undefined,
           });
         }
       }
@@ -108,6 +116,13 @@ export function CapturePreviewScreen({
             This will be saved to <strong>{formatDateLong(todayDateOnly())}</strong>.
           </p>
         )}
+      </div>
+      <div className="ll-card">
+        <NoteEditor
+          value={note}
+          onCommit={setNote}
+          ariaLabel="Note for this entry"
+        />
       </div>
       {error ? (
         <div className="ll-status ll-status-error" role="alert">

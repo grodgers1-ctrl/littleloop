@@ -22,7 +22,7 @@
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Engine, __setEngineForTesting } from "../../src/engine/engine";
 import { createDevIapProvider } from "../../src/engine/iap/dev";
 import type { AdProvider, Platform } from "../../src/engine/engine";
@@ -34,6 +34,12 @@ import type {
   Theme,
   Transition,
 } from "../../src/engine/state";
+import {
+  LittleLoopDB,
+  resetDbForTesting,
+  setDbForTesting,
+} from "../../src/db/database";
+import { getDb } from "../../src/db/database";
 
 function stubPlatform(): Platform {
   return {
@@ -61,6 +67,35 @@ function freshEngine(): Engine {
   __setEngineForTesting(engine);
   return engine;
 }
+
+// Seed a minimal entry so the Day-2-wired `engine.setEntryNote` call
+// has a target row to write to. Lives here so the Day 1 sanity test
+// can keep exercising the V2.5 surface as the days land.
+async function seedEntryForSanity(): Promise<string> {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const id = "entry_sanity";
+  await db.entries.put({
+    id,
+    projectId: "subj_sanity",
+    periodKey: "2026-01-01",
+    capturedDate: "2026-01-01",
+    imageBlobId: "asset_x",
+    thumbnailBlobId: "asset_t",
+    createdAt: now,
+    updatedAt: now,
+  });
+  return id;
+}
+
+beforeEach(() => {
+  setDbForTesting(new LittleLoopDB(`ll-db-test-${Math.random().toString(36).slice(2)}`));
+});
+
+afterEach(() => {
+  resetDbForTesting();
+  __setEngineForTesting(null);
+});
 
 describe("V2.5 Day 1 — architecture scaffold", () => {
   it("creates the five new engine module directories", () => {
@@ -138,9 +173,11 @@ describe("V2.5 Day 1 — architecture scaffold", () => {
 
   it("V2.5 method stubs throw 'not implemented' until later days", async () => {
     const engine = freshEngine();
-    await expect(engine.setEntryNote("entry-1", "hello")).rejects.toThrow(
-      /Day 2/,
-    );
+    // Day 1: setEntryNote is now implemented (Day 2). We exercise it
+    // end-to-end as a smoke test. The other Day-6 stubs still throw.
+    const id = await seedEntryForSanity();
+    const updated = await engine.setEntryNote(id, "Day 1 smoke test");
+    expect(updated.note).toBe("Day 1 smoke test");
     await expect(engine.requestNotificationPermission()).rejects.toThrow(
       /Day 6/,
     );

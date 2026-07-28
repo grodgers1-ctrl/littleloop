@@ -246,4 +246,43 @@ export function newSubjectId(): string {
   return uid("subj");
 }
 
+// ---------------------------------------------------------------------------
+// Per-entry notes (V2.5). The note is optional free text, ≤280 chars.
+// The repository writes the trimmed note and updates `updatedAt`. The
+// engine's `setEntryNote` is a thin wrapper over this function (see
+// `src/engine/engine.ts`).
+// ---------------------------------------------------------------------------
+
+/** Hard cap from the V2 spec. */
+export const ENTRY_NOTE_MAX_LENGTH = 280;
+
+/**
+ * Set the note on an entry. Empty string clears the note. The note is
+ * trimmed; if the trimmed value exceeds the cap, an error is thrown
+ * (the caller can truncate before calling). Returns the updated entry.
+ */
+export async function setEntryNote(
+  entryId: string,
+  note: string,
+): Promise<Entry> {
+  const db = getDb();
+  const trimmed = note.trim();
+  if (trimmed.length > ENTRY_NOTE_MAX_LENGTH) {
+    throw new Error(
+      `Entry note must be ${ENTRY_NOTE_MAX_LENGTH} characters or fewer`,
+    );
+  }
+  return db.transaction("rw", db.entries, async () => {
+    const existing = await db.entries.get(entryId);
+    if (!existing) throw new Error("Entry not found");
+    const updated: Entry = {
+      ...existing,
+      note: trimmed,
+      updatedAt: nowIso(),
+    };
+    await db.entries.put(updated);
+    return updated;
+  });
+}
+
 export { nowIso, uid };

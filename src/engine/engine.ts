@@ -45,6 +45,7 @@ import {
   deleteSubject as repoDeleteSubject,
   listSubjects as repoListSubjects,
   newProjectId as repoNewProjectId,
+  setEntryNote as repoSetEntryNote,
   updateProject as repoUpdateProject,
   updateSubject as repoUpdateSubject,
 } from "../db/repositories";
@@ -411,8 +412,27 @@ export class Engine {
    * chars (`Entry.note` shape; see `state.ts`). Empty string clears
    * the note.
    */
-  async setEntryNote(_entryId: string, _note: string): Promise<Entry> {
-    throw new Error("Engine.setEntryNote not implemented (Day 2)");
+  async setEntryNote(entryId: string, note: string): Promise<Entry> {
+    const trimmed = note.trim();
+    if (trimmed.length > 280) {
+      throw new Error("Entry note must be 280 characters or fewer");
+    }
+    // The repository returns the V1 Entry shape (projectId); the
+    // engine's surface returns the V2 Entry shape (subjectId). The
+    // IDs match by construction (V1 → V2 migration preserves them),
+    // so we can map at the boundary without a second IDB read.
+    const v1 = await repoSetEntryNote(entryId, trimmed);
+    return {
+      id: v1.id,
+      subjectId: v1.projectId,
+      periodKey: v1.periodKey,
+      capturedDate: v1.capturedDate,
+      imageBlobId: v1.imageBlobId,
+      thumbnailBlobId: v1.thumbnailBlobId,
+      note: trimmed,
+      createdAt: v1.createdAt,
+      updatedAt: v1.updatedAt,
+    };
   }
 
   // -------------------------------------------------------------------------

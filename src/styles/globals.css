@@ -782,3 +782,72 @@ img {
 .ll-restore-link:hover {
   text-decoration: underline;
 }
+/* -----------------------------------------------------------------------
+ * V2.5 — per-entry notes (NoteEditor)
+ * --------------------------------------------------------------------- */
+.ll-note-affordance {
+  appearance: none;
+  background: transparent;
+  border: 1px dashed var(--ll-border, currentColor);
+  color: var(--ll-muted, #6b7280);
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  display: block;
+  opacity: 0.85;
+}
+.ll-note-affordance:hover,
+.ll-note-affordance:focus-visible {
+  opacity: 1;
+  outline: none;
+  border-color: var(--ll-accent, #2563eb);
+  color: var(--ll-accent, #2563eb);
+}
+.ll-note-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+.ll-note-textarea {
+  width: 100%;
+  min-height: 48px;
+  resize: vertical;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border: 1px solid var(--ll-border, #d1d5db);
+  border-radius: 8px;
+  background: var(--ll-bg, #fff);
+  color: inherit;
+  box-sizing: border-box;
+}
+.ll-note-textarea:focus-visible {
+  outline: 2px solid var(--ll-accent, #2563eb);
+  outline-offset: 1px;
+  border-color: var(--ll-accent, #2563eb);
+}
+.ll-note-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ll-muted, #6b7280);
+}
+.ll-note-counter-low {
+  color: var(--ll-warning, #b45309);
+  font-weight: 600;
+}
+.ll-note-saving {
+  color: var(--ll-muted, #6b7280);
+  font-style: italic;
+}
+.ll-timeline-note {
+  margin-top: 8px;
+  width: 100%;
+}

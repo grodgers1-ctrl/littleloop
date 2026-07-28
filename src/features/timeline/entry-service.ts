@@ -13,6 +13,8 @@ export interface CreateEntryInput {
   capturedDate: string;
   periodKey: string;
   processed: ProcessedImage;
+  /** Optional note (≤280 chars). Trimmed; clamped to the cap. */
+  note?: string;
 }
 
 export async function createEntry(input: CreateEntryInput): Promise<Entry> {
@@ -20,6 +22,8 @@ export async function createEntry(input: CreateEntryInput): Promise<Entry> {
   const now = nowIso();
   const imageAssetId = newAssetId();
   const thumbAssetId = newAssetId();
+  const trimmedNote = (input.note ?? "").trim();
+  const note = trimmedNote.length > 280 ? trimmedNote.slice(0, 280) : trimmedNote;
 
   return db.transaction(
     "rw",
@@ -67,6 +71,7 @@ export async function createEntry(input: CreateEntryInput): Promise<Entry> {
         capturedDate: input.capturedDate,
         imageBlobId: imageAssetId,
         thumbnailBlobId: thumbAssetId,
+        note: note.length > 0 ? note : undefined,
         createdAt: now,
         updatedAt: now,
       };
