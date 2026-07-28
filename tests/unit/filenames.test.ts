@@ -33,9 +33,25 @@ describe("flipbookFilename", () => {
 });
 
 describe("backupFilename", () => {
-  it("uses .babyflip extension", () => {
+  it("uses .babyloop extension in V2", () => {
     expect(backupFilename("Ada", "2026-03-14")).toBe(
+      "Ada-timeline-backup-2026-03-14.babyloop",
+    );
+  });
+
+  it("backupFilenameV1 preserves the legacy .babyflip extension", async () => {
+    const { backupFilenameV1 } = await import("../../src/lib/filenames");
+    expect(backupFilenameV1("Ada", "2026-03-14")).toBe(
       "Ada-timeline-backup-2026-03-14.babyflip",
     );
+  });
+
+  it("detectBackupFormat distinguishes .babyflip / .babyloop / unknown", async () => {
+    const { detectBackupFormat } = await import("../../src/lib/filenames");
+    expect(detectBackupFormat("foo.babyloop")).toBe("babyloop");
+    expect(detectBackupFormat("foo.babyflip")).toBe("babyflip");
+    expect(detectBackupFormat("foo.zip")).toBe("unknown");
+    expect(detectBackupFormat("FOO.BABYLOOP")).toBe("babyloop");
+    expect(detectBackupFormat("FOO.BABYFLIP")).toBe("babyflip");
   });
 });

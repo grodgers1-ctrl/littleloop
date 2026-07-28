@@ -13,7 +13,10 @@ import { backupFilename } from "../../lib/filenames";
 import { downloadBlob } from "../../lib/download";
 import { dailyPeriodKey, todayDateOnly, weeklyPeriodKey } from "../../lib/dates";
 
-export const BACKUP_FORMAT = "babyflip" as const;
+export const BACKUP_FORMAT = "babyloop" as const;
+/** Legacy V1 format constant. Kept so V1 archives read back as
+ *  themselves; new writes use BACKUP_FORMAT. */
+export const BACKUP_FORMAT_V1 = "babyflip" as const;
 export const BACKUP_FORMAT_VERSION = 1 as const;
 export const MAX_BACKUP_BYTES = 500 * 1024 * 1024; // 500 MB safety limit
 export const MAX_BACKUP_IMAGES = 5_000;
@@ -26,7 +29,7 @@ export interface BackupEntryManifest {
 }
 
 export interface BackupManifest {
-  format: typeof BACKUP_FORMAT;
+  format: typeof BACKUP_FORMAT | typeof BACKUP_FORMAT_V1;
   formatVersion: typeof BACKUP_FORMAT_VERSION;
   exportedAt: string;
   project: Project;
@@ -158,7 +161,7 @@ export async function readBackupFile(file: File | Blob): Promise<RestoredSummary
   } catch {
     throw new BackupError("manifest.json could not be parsed.");
   }
-  if (manifest.format !== BACKUP_FORMAT) {
+  if (manifest.format !== BACKUP_FORMAT && manifest.format !== BACKUP_FORMAT_V1) {
     throw new BackupError(
       `Unsupported backup format: ${String(manifest.format)}`,
     );
