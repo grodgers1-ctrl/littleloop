@@ -405,7 +405,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 94/94 V1 tests pass (no regressions). `npm run build` — 204.15 KB main bundle (62.75 KB gzipped, under the 250 KB budget).
 
-#### Day 2 — V1 → V2 migration
+#### Day 2 — V1 → V2 migration ✅ done 2026-07-28
 
 **Morning**
 - Add the `subjects` and `unlocks` stores to `db/schema.ts`.
@@ -419,6 +419,22 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Write a unit test for the migration in `tests/unit/migration.test.ts` that uses fake-indexeddb.
 
 **End-of-day check**: All existing V1 tests still pass. New migration tests pass. The dev console shows the engine runs migration on init without errors.
+
+**Day 2 shipped**:
+- `src/db/schema.ts` — extended with `Subject` and `StoredUnlock` types. V1 `Project` is now `@deprecated`; V1 `Entry` gains optional `note?` field (V1 rows default to `undefined`). Re-exports `SubjectType` from `engine/state` for one-stop imports.
+- `src/db/database.ts` — Dexie bumped to `version(2)`. Adds `subjects` (`&id, name, type, sortIndex`) and `unlocks` (`&id, platform, product`) tables. The V1 indexes are re-declared verbatim so Dexie preserves them during the upgrade.
+- `src/db/sandbox-database.ts` — same v2 schema mirror, so the sandbox DB stays schema-consistent.
+- `src/db/repositories.ts` — V1 functions (`getActiveProject`, `createProject`, `updateProject`, etc.) kept as deprecated wrappers that read/write the V1 `projects` table so V1 callers don't suddenly see V2 shapes. New V2 helpers: `getActiveSubject`, `listSubjects`, `createSubject`, `updateSubject`, `deleteSubject`, `newSubjectId`. Entry helpers renamed to "subjectId" terminology but still use the `projectId` index (kept identical by design).
+- `src/db/migrations/v1-to-v2.ts` — idempotent migration. Reads V1 `Project` rows, writes `Subject` rows with the **same id** (so entries stay linked), type `baby`, default cadence from V1. Idempotency via `localStorage["ll.v2.migration.done.v1"]`. Sandbox has a separate flag and is a no-op (the sandbox DB keeps its hard-coded `proj_sandbox` row for V1 sandbox UX). Exposes `getMigrationState()` for tests / dev tools. Returns a `MigrationResult` so callers can log without throwing.
+- `src/engine/engine.ts` — `init()` now runs the migration before resolving, seeds the in-memory subject cache via `setSubjects()`, and emits the existing `ready` event.
+- `tests/unit/migration.test.ts` — 10 tests: empty DB no-op, single project, entry id preservation (the re-link), multi-project bulk migration, idempotency on second run, partial-migration dedupe, `getMigrationState()` reporting, sandbox isolation, flag-set early-return semantics, and flag-clear re-run from scratch.
+
+**Deviations from plan**:
+- The spec mentions renaming `projectId` → `subjectId` in `Entry`. The column is **kept** as `projectId` in V2.0 to avoid a Dexie index rebuild in this sprint (the `[projectId+periodKey]` compound index is preserved verbatim across the v1 → v2 schema bump). V2 code reads `subjectId` semantically via type aliases; the actual rename to a `subjectId` column happens in V2.5 cleanup. This trades a one-sprint terminology debt for a safer migration that doesn't risk invalidating existing user indexes.
+- The sandbox DB has a separate migration flag and is a no-op — the spec calls out that the migration runs "once on engine init"; for the sandbox the V1 UX (single hard-coded project) is preserved intentionally.
+- `Entry.note` is `note?: string` (optional), not `note: string` (required). V1 rows persisted before V2 don't have the field, and Dexie will materialise them as `undefined`. The spec says "optional, default empty" — both behaviours align.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 104/104 tests pass (94 V1 unchanged, 10 new migration tests). `npm run build` — 206.17 KB main bundle, 63.24 KB gzipped (under the 250 KB budget).
 
 #### Day 3 — Subject list + create
 

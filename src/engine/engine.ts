@@ -35,6 +35,11 @@ import type {
   UnlockState,
 } from "./state";
 import type { Cadence } from "../db/schema";
+import { listSubjects } from "../db/repositories";
+import {
+  runSandboxV1ToV2Migration,
+  runV1ToV2Migration,
+} from "../db/migrations/v1-to-v2";
 
 // ---------------------------------------------------------------------------
 // Provider interfaces (declared here for type-completeness on Day 1;
@@ -103,7 +108,25 @@ export class Engine {
    *  providers. Safe to call more than once — subsequent calls are no-ops. */
   async init(): Promise<void> {
     if (this.ready) return;
-    // Day 2 wires the V1 → V2 migration here.
+    // Day 2: run the V1 → V2 subject migration. The migration is
+    // idempotent and self-guards via localStorage, so calling init()
+    // repeatedly is safe.
+    const [realResult, sandboxResult] = await Promise.all([
+      runV1ToV2Migration(),
+      runSandboxV1ToV2Migration(),
+    ]);
+    if (!realResult.ok) {
+      console.error("[engine] V1 → V2 migration failed:", realResult.error);
+    }
+    if (!sandboxResult.ok) {
+      console.error(
+        "[engine] sandbox V1 → V2 migration failed:",
+        sandboxResult.error,
+      );
+    }
+    // After migration, seed the in-memory subject cache.
+    const subjects = await listSubjects();
+    this.setSubjects(subjects);
     // Day 4 loads the unlock state from IndexedDB and starts the
     //   30-day revalidation timer.
     // Day 6 initialises the ad provider.
