@@ -20,10 +20,16 @@ import { Modal } from "../../../components/Modal";
 import { useEngine, useExportProgress, useUnlock } from "../../../engine/hooks";
 import type {
   DateRange,
-  ExportRequest,
+  ExportRequestV2,
   ExportResult,
+  FilterId,
   RenderSpeed,
+  ThemeId,
+  TransitionId,
 } from "../../../engine/state";
+import { TRANSITIONS } from "../../../engine/transitions/catalog";
+import { FILTERS } from "../../../engine/filters/catalog";
+import { THEMES } from "../../../engine/themes/catalog";
 
 interface Props {
   open: boolean;
@@ -62,6 +68,13 @@ export function ExportSheet({
   const [oneOffBypass, setOneOffBypass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // V2.5 — Style state. When a theme is selected it overrides
+  // transition + filter. Defaults to no theme/transition/filter
+  // (the V1 export path).
+  const [selectedTheme, setSelectedTheme] = useState<ThemeId>("none");
+  const [selectedTransition, setSelectedTransition] =
+    useState<TransitionId>("none");
+  const [selectedFilter, setSelectedFilter] = useState<FilterId>("none");
 
   const isExporting = progress !== null && progress.phase !== "done" && progress.phase !== "error";
   const isDone = progress?.phase === "done";
@@ -72,13 +85,25 @@ export function ExportSheet({
     setError(null);
     setBusy(true);
     try {
-      const request: ExportRequest = {
+      const request: ExportRequestV2 = {
         subjectId,
         dateRange,
         speed,
         showDate,
         filenameOverride: filenameOverride.trim() || undefined,
         forceNoWatermark: oneOffBypass,
+        // V2.5 — Style selections. Theme takes precedence (the
+        // export engine's composeVfChain handles this).
+        transition:
+          selectedTheme === "none" && selectedTransition !== "none"
+            ? selectedTransition
+            : undefined,
+        filter:
+          selectedTheme === "none" && selectedFilter !== "none"
+            ? selectedFilter
+            : undefined,
+        theme:
+          selectedTheme !== "none" ? selectedTheme : undefined,
       };
       const result = await engine.export(request, () => {
         // Progress is forwarded by the engine itself via the
@@ -202,23 +227,118 @@ export function ExportSheet({
               ))}
             </div>
           </div>
-
           <div className="ll-field">
-            <label
-              className="ll-radio-card is-locked"
-              aria-disabled="true"
-            >
-              <input type="checkbox" checked={false} disabled />
-              <div className="ll-radio-card-body">
-                <div className="ll-radio-card-title">Style</div>
-                <div className="ll-radio-card-desc">
-                  {unlock === "studio"
-                    ? "Transitions, filters, and themes available."
-                    : "Get Studio for transitions, filters, and themes."}
-                </div>
-              </div>
-            </label>
-          </div>
+                      <label>Style</label>
+                      {unlock === "studio" ? (
+                        <>
+                          {/* Theme radio cards */}
+                          <div className="ll-radio-row ll-style-section">
+                            <div className="ll-style-label">Theme</div>
+                            {THEMES.filter((t) => t.id !== "none").map((t) => (
+                              <label
+                                key={t.id}
+                                className={`ll-radio-card ${selectedTheme === t.id ? "is-active" : ""}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="v2-style-theme"
+                                  checked={selectedTheme === t.id}
+                                  onChange={() => {
+                                    setSelectedTheme(t.id);
+                                    // When a theme is selected, clear the
+                                    // transition+filter so the engine uses
+                                    // the theme's bundled values.
+                                    setSelectedTransition("none");
+                                    setSelectedFilter("none");
+                                  }}
+                                />
+                                <div className="ll-radio-card-title">{t.label}</div>
+                                <div className="ll-radio-card-desc">{t.blurb}</div>
+                              </label>
+                            ))}
+                          </div>
+                          {/* Transition radio cards — only when no theme */}
+                          {selectedTheme === "none" ? (
+                            <div className="ll-radio-row ll-style-section">
+                              <div className="ll-style-label">Transition</div>
+                              {TRANSITIONS.filter((t) => t.id !== "none").map((t) => (
+                                <label
+                                  key={t.id}
+                                  className={`ll-radio-card ${selectedTransition === t.id ? "is-active" : ""}`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="v2-style-transition"
+                                    checked={selectedTransition === t.id}
+                                    onChange={() => setSelectedTransition(t.id)}
+                                  />
+                                  <div className="ll-radio-card-title">{t.label}</div>
+                                  <div className="ll-radio-card-desc">{t.blurb}</div>
+                                </label>
+                              ))}
+                              <label
+                                className={`ll-radio-card ${selectedTransition === "none" ? "is-active" : ""}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="v2-style-transition"
+                                  checked={selectedTransition === "none"}
+                                  onChange={() => setSelectedTransition("none")}
+                                />
+                                <div className="ll-radio-card-title">None</div>
+                                <div className="ll-radio-card-desc">Plain cuts</div>
+                              </label>
+                            </div>
+                          ) : null}
+                          {/* Filter radio cards — only when no theme */}
+                          {selectedTheme === "none" ? (
+                            <div className="ll-radio-row ll-style-section">
+                              <div className="ll-style-label">Filter</div>
+                              {FILTERS.filter((f) => f.id !== "none").map((f) => (
+                                <label
+                                  key={f.id}
+                                  className={`ll-radio-card ${selectedFilter === f.id ? "is-active" : ""}`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="v2-style-filter"
+                                    checked={selectedFilter === f.id}
+                                    onChange={() => setSelectedFilter(f.id)}
+                                  />
+                                  <div className="ll-radio-card-title">{f.label}</div>
+                                  <div className="ll-radio-card-desc">{f.blurb}</div>
+                                </label>
+                              ))}
+                              <label
+                                className={`ll-radio-card ${selectedFilter === "none" ? "is-active" : ""}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name="v2-style-filter"
+                                  checked={selectedFilter === "none"}
+                                  onChange={() => setSelectedFilter("none")}
+                                />
+                                <div className="ll-radio-card-title">None</div>
+                                <div className="ll-radio-card-desc">Original colours</div>
+                              </label>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <label
+                          className="ll-radio-card is-locked"
+                          aria-disabled="true"
+                        >
+                          <input type="checkbox" checked={false} disabled />
+                          <div className="ll-radio-card-body">
+                            <div className="ll-radio-card-title">Style</div>
+                            <div className="ll-radio-card-desc">
+                              Get Studio for transitions, filters, and themes.
+                            </div>
+                          </div>
+                        </label>
+                      )}
+                    </div>
 
           <div className="ll-field">
             <label className="ll-checkbox-row">
