@@ -262,9 +262,11 @@ interface Props {
   onOpenSubjectSettings: (id: string) => void;
   /** Navigate to the paywall's restore section. */
   onRestore?: () => void;
+  /** Navigate to the app-wide Settings screen. */
+  onSettings?: () => void;
 }
 
-export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings, onRestore }: Props) {
+export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings, onRestore, onSettings }: Props) {
   const subjects = useSubjects();
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -290,13 +292,14 @@ export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings, onRestore }
                   : `${subjects.length} subjects`}
             </p>
           </div>
-          <Button
-            variant="primary"
-            onClick={() => setSheetOpen(true)}
-            aria-label="Add subject"
-          >
-            + Add subject
-          </Button>
+          <Button variant="primary" onClick={() => setSheetOpen(true)} aria-label="Add subject">
+                      + Add subject
+                    </Button>
+                    {onSettings ? (
+                      <Button variant="ghost" onClick={onSettings}>
+                        Settings
+                      </Button>
+                    ) : null}
         </div>
       </div>
 

@@ -11,6 +11,7 @@ import { V2SubjectSettingsScreen } from "./subject/V2SubjectSettingsScreen";
 import { PaywallScreen } from "./iap/PaywallScreen";
 import { ExportSheet } from "./export/export-sheet/ExportSheet";
 import { ExportResultScreen } from "./export/export-sheet/ExportResultScreen";
+import { V2SettingsScreen } from "./settings/V2SettingsScreen";
 import {
   useV2Router,
   type V2Route,
@@ -120,6 +121,15 @@ function V2Shell() {
       />
     );
     headerTitle = "Export complete";
+    showBack = true;
+  } else if (route.name === "settings") {
+    body = (
+      <V2SettingsScreen
+        onBack={() => navigate({ name: "home" } satisfies V2Route)}
+        onRestore={() => navigate({ name: "paywall", source: "home" } satisfies V2Route)}
+      />
+    );
+    headerTitle = "Settings";
     showBack = true;
   } else {
     // V2-only routes that aren't yet handled (capture-preview,

@@ -10,6 +10,7 @@ export type V2RouteName =
   | "home"
   | "subject"
   | "subject-settings"
+  | "settings"
   | "paywall"
   | "export-config"
   | "export-progress"
@@ -19,6 +20,7 @@ export type V2Route =
   | { name: "home" }
   | { name: "subject"; subjectId: string }
   | { name: "subject-settings"; subjectId: string }
+  | { name: "settings" }
   | { name: "paywall"; source: "home" | "export-sheet" }
   | { name: "export-config"; subjectId: string }
   | { name: "export-progress"; subjectId: string }

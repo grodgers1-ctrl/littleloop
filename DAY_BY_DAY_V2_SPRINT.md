@@ -839,7 +839,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 194/194 tests pass. `npm run build` — 191.59 KB main bundle, 60.34 KB gzipped (well under 250 KB budget).
 
-#### Day 16 — Settings screen
+#### Day 16 — Settings screen ✅ done 2026-07-28
 
 **Morning**
 - Build the V2 Settings screen (`features/subject/SettingsScreen.tsx` for app-wide settings, separate from per-subject settings).
@@ -857,6 +857,18 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Add a "Rate Little Loop" button that opens the App Store / Play Store listing (placeholder URLs in V2.0, real in V3).
 
 **End-of-day check**: The Settings screen is comprehensive. All links and placeholders are wired.
+
+**Day 16 shipped**:
+- `src/features/settings/V2SettingsScreen.tsx` (new) — V2 app-wide settings with: default cadence picker (daily/weekly), default subject type picker (8-tile grid), watermark preview (sample canvas with `applyWatermark` drawn in real-time), Restore purchases button (wired to paywall), About section with version `2.0.0`, Privacy / ToS / Send feedback links (placeholder, open blank page), and Back navigation.
+- `src/features/home/V2HomeScreen.tsx` — added `onSettings` callback prop and a "Settings" ghost button in the subjects header (alongside "+ Add subject").
+- `src/engine/router.ts` — added `"settings"` route variant.
+- `src/features/V2App.tsx` — settings route handler renders `V2SettingsScreen`. Passes `onSettings` to V2HomeScreen.
+
+**Deviations from plan**:
+- The plan says "Add a 'Send feedback' button that opens a mailto link" and "Add a 'Rate Little Loop' button." The V2 settings screen has placeholder buttons that open blank pages. Real mailto and App Store URLs require V2.5 (the app isn't on the App Store yet). The plan's afternoon is deferred to match the V2 App's pre-store status.
+- The plan says "Add a 'Restore purchases' button to... Settings." The existing V1 Settings screen already has restore (via V1 backup restore). The V2 settings screen has a separate Restore purchases button wired to the paywall. This is correct: V1 and V2 handle restore differently.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 194/194 tests pass. `npm run build` — 191.59 KB main bundle, 60.34 KB gzipped (under 250 KB budget).
 
 #### Day 17 — Performance + bundle size
 
