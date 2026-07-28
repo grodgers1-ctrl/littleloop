@@ -357,14 +357,19 @@ export class Engine {
   // -------------------------------------------------------------------------
 
   async export(
-    _request: ExportRequest,
+    request: ExportRequest,
     onProgress: (p: ExportProgress) => void,
   ): Promise<ExportResult> {
-    // The orchestrator wires `onProgress` into the export-progress event
-    // for the UI layer. On Day 1 we forward synthetic progress so callers
-    // can be wired up before Day 8 lands.
-    onProgress({ phase: "error", ratio: 0, message: "not implemented (Day 8)" });
-    throw new Error("Engine.export not implemented (Day 8)");
+    // Forward the user's progress callback into the engine's event
+    // stream so subscribers (the React export sheet) see the same
+    // updates. The function call uses an internal forwarder so we
+    // don't allocate a new closure per progress tick.
+    const forward = (p: ExportProgress) => {
+      this.setExportProgress(p);
+      onProgress(p);
+    };
+    const { runExport: runExportEngine } = await import("./export/engine");
+    return runExportEngine(request, this.getUnlockState(), forward);
   }
 
   async saveToCameraRoll(_blob: Blob, _filename: string): Promise<boolean> {
