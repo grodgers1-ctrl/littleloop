@@ -4,7 +4,7 @@
 >
 > The implementation source of truth is `V2_DEV_SPEC.md`. This sprint is the execution order. If a sprint item conflicts with the spec, follow the spec.
 >
-> **Sprint scope**: 4 weeks (20 working days). Targets: pricing model live, share path live, IAP receipts validating, V1 regression-tested, soft launch to 10% of PWA users for 1 week.
+> **Sprint scope**: 4 weeks (20 working days). Targets: pricing model live, share path live, IAP receipts validating, V1 regression-tested, ship to 100% of PWA users on deploy.
 >
 > **Out of scope for this sprint** (V2.5 / V2.6): daily reminders, auto-crop face, burst capture, onion-skin overlay, transitions/filters/themes creative content, EXIF date detection, memory lane, per-entry notes, multi-subject timeline UI polish, Capacitor shell, store submission.
 
@@ -596,7 +596,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **End-of-day check**: V1 regression suite passes. V2.0 e2e test passes (or is at 90% — final 10% may be platform-specific). The engine boundary is clean. No React code reaches into engine internals.
 
-### Week 3: Polish, soft launch prep
+### Week 3: Polish, accessibility, ship
 
 #### Day 15 — Paywall polish
 
@@ -644,25 +644,29 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **End-of-day check**: The main bundle is under budget. The engine is split correctly. The export pipeline is profiled and documented.
 
-#### Day 18 — Soft launch infrastructure
+#### Day 18 — Accessibility + ad frequency tuning
 
 **Morning**
-- Implement the soft launch flag. The app checks `localStorage.getItem('v2-soft-launch')` to determine cohort:
-  - Cohort 0 (10%): enabled.
-  - Cohort 1 (90%): disabled, sees the V1 paywall placeholder.
-- The cohort is decided randomly on first launch and persisted. A QA override lets the team force-enable for testing.
+- Audit the home screen, export sheet, capture flow, and settings screen for accessibility:
+  - All interactive elements have minimum 44×44 pt touch targets.
+  - All controls are reachable by VoiceOver / TalkBack with descriptive labels.
+  - The export flow works with the screen reader active.
+  - The ad placement does not overlap any interactive element.
+  - Colour contrast on all text is WCAG AA or better.
+  - The watermark doesn't interfere with the photo's focal point.
 
 **Afternoon**
-- Add a feature flag dashboard in Settings (hidden, dev-only). Shows: cohort, IAP provider, unlock state, last validation timestamp.
-- Set up a way to read these flags from a remote config (V2.5 prep — for now, just a localStorage key).
+- Tune the ad frequency cap. The placeholder `AdProvider` is the active implementation in V2.0; the cap (one impression per 30 minutes) is enforced but not yet tuned. Run a session with the team: how often does the ad feel too frequent? Adjust the constant.
+- Audit the ad placement for visual quality. The placeholder text "Sponsored" should not look broken or unfinished.
+- Add a small `prefers-reduced-motion` check for users with motion sensitivity (used by future V2.5 transitions; for V2.0 it just affects the export sheet's slide-in animation).
 
-**End-of-day check**: The soft launch flag works. The dashboard shows the right state. The team can force-enable for QA.
+**End-of-day check**: Accessibility checklist is complete. The ad frequency is tuned. The app respects `prefers-reduced-motion`.
 
 #### Day 19 — V1 regression sweep
 
 **Morning**
 - Run the V1 e2e test. The test is the canonical V1 acceptance suite.
-- Run the new V2.0 e2e test (subject create, export, share, backup, restore).
+- Run the new V2.0 e2e test (subject create, export, save, share, backup, restore).
 - Run all unit tests.
 
 **Afternoon**
@@ -685,9 +689,9 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Final code review. The engine boundary must be clean. The IAP module must be correct. The migration must be idempotent.
 - Tag the commit: `v2.0.0`.
 - Deploy to production via the existing Vercel pipeline.
-- Notify the team: V2.0 is ready for soft launch.
+- Notify the team: V2.0 is live on `https://babyflipbook.dev`.
 
-**End-of-day check**: V2.0 is deployed. Soft launch cohort is enabled. The team knows the sprint is done.
+**End-of-day check**: V2.0 is deployed to 100% of PWA users. The team knows the sprint is done.
 
 ---
 
@@ -755,7 +759,7 @@ V2.0 has these automated tests:
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| V1 → V2 migration breaks existing user data. | Low | Critical | Migration is idempotent and tested against fake-indexeddb with realistic V1 data. Soft launch cohort is 10% — the impact of a bad migration is bounded. |
+| V1 → V2 migration breaks existing user data. | Low | Critical | Migration is idempotent and tested against fake-indexeddb with realistic V1 data. V2.0 is shipped to 100% on deploy, so the impact of a bad migration is bounded by the V1 user base (small at the time of V2.0 launch). |
 | The `Project` → `Subject` rename breaks V1 callers. | High | Medium | Keep V1 names as deprecated wrappers in the same commit. The rename is internal; the V1 export path still works. |
 | IAP receipts fail to validate on real Apple / Google devices. | Medium | High | IAP is behind a feature flag in V2.0. The dev provider is the only active provider until V2.5. |
 | The new home screen's subject tiles are slow with 50+ subjects. | Low | Medium | Virtualize the list. For V2.0, 50+ subjects is uncommon; the limit is 1000 in IndexedDB. |
@@ -777,13 +781,13 @@ V2.0 ships when:
 5. The IAP architecture is verified end to end with the dev provider.
 6. The watermark is verified on light, dark, and patterned photos.
 7. The home screen renders correctly on a 360×640 viewport.
-8. The soft launch flag is implemented and tested.
+8. The ad frequency cap is tuned and accessible.
 9. The team has done a final code review.
 10. The V2.0 changelog is written.
 11. The tag `v2.0.0` is committed and pushed.
 12. The deploy is verified on `https://babyflipbook.dev`.
 
-After V2.0 ships, the soft launch cohort runs for 1 week. If no P0 / P1 bugs are reported, V2.0 is promoted to 100% of users. Then V2.5 starts.
+After V2.0 ships, V2.5 starts.
 
 ---
 

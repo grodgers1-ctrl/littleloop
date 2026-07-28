@@ -361,7 +361,7 @@ V2 is a single V2 release, but it is internally phased for engineering and shipp
 - Implement the home screen with subject tiles and sort.
 - Migrate V1 `Project` data to V2 `Subject` on first launch.
 - Test the entire V1 surface for regressions.
-- Soft launch to 10% of PWA users for 1 week; full launch.
+- Ship to 100% of PWA users on deploy.
 
 **Scope estimate: 3-4 weeks of focused engineering.**
 
