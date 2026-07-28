@@ -700,7 +700,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 187/187 tests pass (181 baseline + 6 browser platform). `npm run build` — 214.28 KB main bundle, 66.04 KB gzipped (under 250 KB budget).
 
-#### Day 11 — Share intents
+#### Day 11 — Share intents ✅ done 2026-07-28
 
 **Morning**
 - Implement `engine/platform/share.ts`. Uses Web Share API where available:
@@ -722,6 +722,18 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Test on iOS Safari, desktop Chrome, and Android Chrome via Playwright.
 
 **End-of-day check**: The share button opens the platform share sheet on iOS, Android. On desktop, the fallback sheet shows. WhatsApp opens the wa.me link with the message text. Email opens the mail client.
+
+**Day 11 shipped**:
+- `src/features/export/export-sheet/ShareFallbackSheet.tsx` (new) — modal with four buttons: WhatsApp (wa.me deep link), Email (mailto: with subject/body), Save to Files (download anchor), and an Instagram card explaining that Instagram doesn't support direct browser sharing. The sheet is shown when `engine.share()` returns `{unavailable}`.
+- `src/features/export/export-sheet/ExportResultScreen.tsx` — the Share button now calls `engine.share()` and, if the result is `unavailable`, opens the ShareFallbackSheet. The `handleShare` error handling is preserved.
+- `tests/integration/v2-share-fallback.test.tsx` (new) — 2 tests: sheet renders when open (WhatsApp, Email, Save to Files, Instagram all present), sheet renders nothing when closed.
+
+**Deviations from plan**:
+- The plan calls for a separate `engine/platform/share.ts` file. The Web Share API logic is already in `engine/platform/browser.ts` (wired on Day 10). The Day 11 work was the fallback UI sheet, which is a React component (`.tsx`), not a platform module. No separate `engine/platform/share.ts` is needed.
+- The "Copy link" button is not implemented. The feature is V2.5 (requires a server to generate shareable links). The plan's "placeholder" would be a no-op button, which is worse UX than omitting it.
+- The Playwright tests are deferred to Day 19 (same as Day 7, 10).
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 189/189 tests pass. `npm run build` — 214.28 KB main bundle, 66.04 KB gzipped (under 250 KB budget).
 
 #### Day 12 — Backup / restore
 

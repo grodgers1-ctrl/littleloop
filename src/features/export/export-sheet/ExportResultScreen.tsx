@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/Button";
 import { useEngine } from "../../../engine/hooks";
 import type { ExportResult } from "../../../engine/state";
+import { ShareFallbackSheet } from "./ShareFallbackSheet";
 
 interface Props {
   result: ExportResult;
@@ -25,6 +26,7 @@ export function ExportResultScreen({
   const videoUrl = useRef<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showShareFallback, setShowShareFallback] = useState(false);
 
   useEffect(() => {
     const url = URL.createObjectURL(result.blob);
@@ -57,10 +59,13 @@ export function ExportResultScreen({
   async function handleShare() {
     setSaveError(null);
     try {
-      await engine.share(result.blob, result.filename, {
+      const result2 = await engine.share(result.blob, result.filename, {
         title: `${subjectName} Little Loop`,
         text: `${subjectName} — a Little Loop timeline`,
       });
+      if (!result2.shared && result2.reason === "unavailable") {
+        setShowShareFallback(true);
+      }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Could not share.");
     }
@@ -117,6 +122,14 @@ export function ExportResultScreen({
           {saveError}
         </div>
       ) : null}
+
+      <ShareFallbackSheet
+        open={showShareFallback}
+        blob={result.blob}
+        filename={result.filename}
+        subjectName={subjectName}
+        onClose={() => setShowShareFallback(false)}
+      />
 
       <div
         className="ll-card ll-card-quiet"
