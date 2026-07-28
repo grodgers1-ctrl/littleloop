@@ -1,11 +1,15 @@
-// V2.0 engine state — the canonical type interfaces for Subject, Entry,
-// UnlockState, IAP, Platform, Ads, Export. These types are referenced by
-// every other engine module. New code in V2.0 should import from here
-// rather than redefining types locally.
+// V2.0 + V2.5 engine state — the canonical type interfaces for Subject,
+// Entry, UnlockState, IAP, Platform, Ads, Export, plus the V2.5
+// notifications / transitions / filters / themes / EXIF shapes. These
+// types are referenced by every other engine module. New code should
+// import from here rather than redefining types locally.
 //
 // The V1 `Project` type still lives in `src/db/schema.ts` (marked
 // @deprecated in V2.0, removed in V2.5). It is NOT re-exported here —
 // engine code uses `Subject` only.
+//
+// V2.5 extensions are kept at the bottom of this file under a clearly
+// labelled section so the V2.0 surface is easy to audit.
 
 import type { Cadence } from "../db/schema";
 
@@ -213,4 +217,143 @@ export interface EngineFeatureFlags {
   iapGoogleEnabled: boolean;
   /** Real Stripe Checkout. Default false in V2.0. */
   iapStripeEnabled: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// V2.5 — Notifications, transitions, filters, themes, EXIF.
+// These types are added in V2.5 and are gated on the Studio unlock where
+// they affect exports. Notifications and EXIF are universal (no unlock).
+// Pure types live here; the catalog / apply logic lives in the engine
+// module directories (`src/engine/notifications/`, etc.) and is wired in
+// on later days. Keeping the types here means the engine surface stays
+// stable while the implementations land.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Notifications — daily / weekly local reminders. Universally available.
+// ---------------------------------------------------------------------------
+
+export type NotificationCadence = "off" | "daily" | "weekly";
+
+export interface NotificationSchedule {
+  /** Off / daily / weekly cadence. Default off. */
+  cadence: NotificationCadence;
+  /** Time-of-day in 24h `HH:MM`. Ignored when cadence is "off". */
+  hour: number;
+  /** Time-of-day minute `0..59`. Ignored when cadence is "off". */
+  minute: number;
+}
+
+export type NotificationPermissionState =
+  | "unsupported"
+  | "default"
+  | "granted"
+  | "denied";
+
+export interface NotificationState {
+  /** Whether the current browser supports the Notification API. */
+  permission: NotificationPermissionState;
+  /** Persisted schedule. Defaults to off. */
+  schedule: NotificationSchedule;
+  /** ISO datetime of the next scheduled fire, or null if none. */
+  nextDueAt: string | null;
+  /** ISO datetime of the last tick the engine has fired (in-app banner
+   *  layer reads this to surface "your recent reminder fired"). */
+  lastFiredAt: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Transitions — Studio unlock. The catalog is built on Day 7; the id
+// union is locked here so the engine surface is stable.
+// ---------------------------------------------------------------------------
+
+export type TransitionId =
+  | "none"
+  | "crossfade"
+  | "slide-left"
+  | "slide-up"
+  | "flip-3d"
+  | "zoom-in";
+
+export interface Transition {
+  id: TransitionId;
+  /** Human-readable label shown in the export sheet. */
+  label: string;
+  /** Whether this transition is a paid (Studio) feature. */
+  studioOnly: boolean;
+  /** Short description for the locked-with-upgrade card. */
+  blurb: string;
+}
+
+// ---------------------------------------------------------------------------
+// Filters — Studio unlock. Catalog builds on Day 7.
+// ---------------------------------------------------------------------------
+
+export type FilterId =
+  | "none"
+  | "warm"
+  | "cool"
+  | "bw"
+  | "sepia"
+  | "vignette"
+  | "soft-focus"
+  | "slight-grain";
+
+export interface Filter {
+  id: FilterId;
+  label: string;
+  studioOnly: boolean;
+  blurb: string;
+}
+
+// ---------------------------------------------------------------------------
+// Themes — Studio unlock. Each theme bundles a transition + a filter + a
+// render speed. When a theme is selected, it overrides the per-export
+// transition and filter.
+// ---------------------------------------------------------------------------
+
+export type ThemeId = "none" | "vintage" | "studio" | "memory" | "pop";
+
+export interface Theme {
+  id: ThemeId;
+  label: string;
+  studioOnly: boolean;
+  /** Bundle members — resolved against the catalogs at apply time. */
+  transition: TransitionId;
+  filter: FilterId;
+  /** A theme can also pin a render speed. */
+  speed: RenderSpeed;
+  blurb: string;
+}
+
+// ---------------------------------------------------------------------------
+// ExportRequestV2 — V2.5 extension of `ExportRequest`. The V2.0 shape
+// stays unchanged so existing V2 callers continue to compile and run.
+// V2.5 export paths consume `ExportRequestV2`; the engine's `export()`
+// method accepts the wider shape and the V2.0 export pipeline only
+// reads the V2.0 fields it knows about.
+// ---------------------------------------------------------------------------
+
+export interface ExportRequestV2 extends ExportRequest {
+  /** Studio-only. Applied between frames during encoding. */
+  transition?: TransitionId;
+  /** Studio-only. Applied to every frame. */
+  filter?: FilterId;
+  /** Studio-only. If set, overrides `transition` + `filter` + `speed`. */
+  theme?: ThemeId;
+}
+
+// ---------------------------------------------------------------------------
+// ScheduleOpts — input shape for `engine.scheduleNotifications()`.
+// ---------------------------------------------------------------------------
+
+export interface ScheduleOpts {
+  cadence: NotificationCadence;
+  /** ISO datetime of the user's last capture. Used to schedule the
+   *  first reminder at or after the next cadence boundary. */
+  lastCaptureAt: string | null;
+  /** Time-of-day to fire. */
+  hour: number;
+  /** Time-of-day minute. */
+  minute: number;
 }

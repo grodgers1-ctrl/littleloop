@@ -26,10 +26,13 @@ import type {
   EngineEvent,
   EngineEventHandler,
   EngineEventName,
+  Entry,
   ExportProgress,
-  ExportRequest,
+  ExportRequestV2,
   ExportResult,
   IapProduct,
+  NotificationState,
+  ScheduleOpts,
   ShareOptions,
   ShareResult,
   Subject,
@@ -357,7 +360,7 @@ export class Engine {
   // -------------------------------------------------------------------------
 
   async export(
-    request: ExportRequest,
+    request: ExportRequestV2,
     onProgress: (p: ExportProgress) => void,
   ): Promise<ExportResult> {
     // Forward the user's progress callback into the engine's event
@@ -368,6 +371,12 @@ export class Engine {
       this.setExportProgress(p);
       onProgress(p);
     };
+    // V2.5 acceptance: this method now accepts `ExportRequestV2` (the
+    // V2.5 extension of `ExportRequest`) so callers can pass
+    // `transition` / `filter` / `theme`. The V2.0 export pipeline
+    // only reads the V2.0 fields it knows about and ignores the
+    // extras. The transition / filter / theme composition is added
+    // on Day 7 in the export engine module.
     const { runExport: runExportEngine } = await import("./export/engine");
     return runExportEngine(request, this.getUnlockState(), forward);
   }
@@ -390,6 +399,77 @@ export class Engine {
 
   async restoreFromFile(_file: File): Promise<void> {
     throw new Error("Engine.restoreFromFile not implemented (Day 12)");
+  }
+
+  // -------------------------------------------------------------------------
+  // V2.5 — Per-entry notes (Day 2 wiring, IDB write here on Day 2).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Set the note text on an entry. Day 1 ships the stub; Day 2 wires
+   * the IDB write + the `NoteEditor` UI. The note is capped at 280
+   * chars (`Entry.note` shape; see `state.ts`). Empty string clears
+   * the note.
+   */
+  async setEntryNote(_entryId: string, _note: string): Promise<Entry> {
+    throw new Error("Engine.setEntryNote not implemented (Day 2)");
+  }
+
+  // -------------------------------------------------------------------------
+  // V2.5 — Notifications (Day 6).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Request the user's permission to show local notifications. Returns
+   * `true` when granted, `false` otherwise. Idempotent: safe to call
+   * repeatedly; the browser collapses overlapping requests.
+   *
+   * Day 1 ships the stub. The concrete `NotificationProvider` (browser
+   * local) is built on Day 6.
+   */
+  async requestNotificationPermission(): Promise<boolean> {
+    throw new Error(
+      "Engine.requestNotificationPermission not implemented (Day 6)",
+    );
+  }
+
+  /**
+   * Schedule the next local notification according to the user's
+   * cadence + time-of-day. The browser implementation persists the
+   * next-due timestamp in IndexedDB so a page reload can re-schedule.
+   *
+   * Day 6 wires the schedule storage; the engine exposes this method
+   * already so the V2.5 settings UI can be wired against it.
+   */
+  async scheduleNotifications(_opts: ScheduleOpts): Promise<void> {
+    throw new Error("Engine.scheduleNotifications not implemented (Day 6)");
+  }
+
+  /**
+   * Cancel any pending local notifications. Idempotent.
+   */
+  async cancelNotifications(): Promise<void> {
+    throw new Error("Engine.cancelNotifications not implemented (Day 6)");
+  }
+
+  /**
+   * Subscribe to in-app notification ticks. The browser fires
+   * `cb()` whenever a scheduled notification matches the current
+   * moment (the `setTimeout` chain in the BrowserLocal provider
+   * drives this). Returns an unsubscribe function.
+   *
+   * This is the unified event for the in-app banner UI; the
+   * listener pattern matches the engine's existing `on(event, handler)`
+   * shape but stays typed as a separate channel because notifications
+   * have a different payload.
+   */
+  onNotificationTick(_cb: () => void): () => void {
+    throw new Error("Engine.onNotificationTick not implemented (Day 6)");
+  }
+
+  /** Reactive getter for the current notification state. */
+  getNotificationState(): NotificationState {
+    throw new Error("Engine.getNotificationState not implemented (Day 6)");
   }
 
   // -------------------------------------------------------------------------

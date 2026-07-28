@@ -1071,3 +1071,13 @@ After V2.0 ships, V2.5 starts.
 ---
 
 *End of V2.0 sprint.*
+
+---
+
+## V2.5 sprint — redirect
+
+The V2.0 sprint is closed. V2.5 continues this work; see the new day-by-day doc:
+
+**`DAY_BY_DAY_V25_SPRINT.md`** — the V2.5 (engagement + creative content) sprint, 10 working days. The V2.0 day-by-day is preserved here as the source of truth for V2.0 architecture and operating rules; V2.5 inherits those rules.
+
+The V2.5 kickoff (`V25_KICKOFF.md`) is the source of truth for V2.5 plan items. The V2.0 spec (`V2_DEV_SPEC.md`) is still authoritative for V2.0 features it covers; V2.5 extends it per the kickoff.
