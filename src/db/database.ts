@@ -24,7 +24,7 @@ class LittleLoopDB extends Dexie {
   assets!: EntityTable<Asset, "id">;
   // V2.0 stores
   subjects!: EntityTable<Subject, "id">;
-  unlocks!: EntityTable<StoredUnlock, "id">;
+  unlocks!: EntityTable<StoredUnlock, "token">;
 
   constructor(name = "little-loop-db") {
     super(name);
@@ -36,13 +36,14 @@ class LittleLoopDB extends Dexie {
     });
     // V2.0 schema. Adds subjects + unlocks. The existing V1 indexes
     // are re-declared verbatim so Dexie doesn't drop them during the
-    // upgrade.
+    // upgrade. `unlocks` is keyed by `&token` (receipt tokens are
+    // unique per purchase) plus secondary indexes on platform, product.
     this.version(2).stores({
       projects: "&id",
       entries: "&id, projectId, [projectId+periodKey], capturedDate",
       assets: "&id, projectId, type",
       subjects: "&id, name, type, sortIndex",
-      unlocks: "&id, platform, product",
+      unlocks: "&token, platform, product",
     });
   }
 }

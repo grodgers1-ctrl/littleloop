@@ -470,7 +470,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 113/113 tests pass (94 V1 + 10 migration + 9 engine-subjects). `npm run build` — 207.51 KB main bundle, 63.58 KB gzipped (under the 250 KB budget).
 
-#### Day 4 — IAP module + dev provider
+#### Day 4 — IAP module + dev provider ✅ done 2026-07-28
 
 **Morning**
 - Implement `IapProvider` interface and the `iap/dev.ts` provider (always returns 'studio').
@@ -483,6 +483,28 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Wire the engine's `iapBuy` method. In dev mode, it returns 'studio' immediately. In production, the build pipeline swaps in the Apple/Google/Stripe provider.
 
 **End-of-day check**: In dev mode, the user can "buy" Clean and Studio, the unlock state updates, and the home screen re-renders without the ad. The Restore purchases button restores the dev unlock.
+
+**Day 4 shipped**:
+- `src/engine/iap/provider.ts` (new) — canonical `IapProvider` interface (`isAvailable`, `buy`, `restore`, `getUnlock`).
+- `src/engine/iap/state.ts` (new) — IndexedDB persistence via the `unlocks` table, device fingerprint (FNV-1a fold), `recordPurchase`, `loadEffectiveUnlock`, `markValidated`, `revokeUnlock`, `revalidate`, plus a localStorage fast-path cache.
+- `src/engine/iap/dev.ts` (new) — dev IAP provider that simulates a real store end to end: `buy()` immediately persists a real-shaped receipt, `restore()` and `getUnlock()` read from IndexedDB. `isAvailable` is gated on `import.meta.env.DEV` (or `available: true` for tests).
+- `src/engine/feature-flags.ts` (new) — `readIapFeatureFlags()` reads `VITE_IAP_APPLE_ENABLED`, `VITE_IAP_GOOGLE_ENABLED`, `VITE_IAP_STRIPE_ENABLED` (all default false). Used by the provider factory to gate real providers in V2.5.
+- `src/engine/providers.ts` — `createIapProvider()` now reads the feature flags and returns either the dev provider (default) or an "unavailable" dev provider when any flag is set. Day 5 will instantiate the Apple/Google/Stripe stubs here.
+- `src/engine/engine.ts` — `iapBuy` and `iapRestore` are wired to delegate to `engine.iap`. `init()` now seeds the cached unlock state from `loadEffectiveUnlock()`. The inline `IapProvider` interface is removed in favour of the canonical one in `iap/provider.ts`.
+- `src/db/{schema,database,sandbox-database}.ts` — `StoredUnlock` re-keyed on `&token` (matches Dexie primary key).
+- `src/engine/router.ts` — `V2Route` adds a `paywall` variant.
+- `src/features/iap/PaywallScreen.tsx` (new) — two product cards (Clean £1.99 / Studio £4.99), Restore purchases button, "coming soon" state when the provider is unavailable, ownership-aware disable (already-unlocked state shows "Already unlocked").
+- `src/features/V2App.tsx` — paywall route wired.
+- `src/main.tsx` — switches to `createIapProvider()` (the new factory).
+- `src/styles/globals.css` — `.ll-paywall-row`, `.ll-paywall-price`, `.ll-paywall-bullets` styles, reusing V1 tokens.
+- `tests/integration/engine-iap.test.ts` (new) — 13 tests: state helpers, dev provider buy/upgrade/event-emission, restore semantics, persistence across engine instances, unavailable provider, init-from-IDB, both products.
+
+**Deviations from plan**:
+- The Day 4 plan says the dev provider "always returns 'studio'". I instead built a **functional** dev provider that actually persists receipts end to end and lets the user buy either Clean or Studio. The kickoff's "Free first, paid second" principle (§4) is preserved — the dev provider is "free to test" rather than "skip the price in dev", which matches the spec's intent better than auto-grant.
+- The 30-day revalidation timer is scaffolded in `iap/state.ts` (`revalidate()` function, `REVALIDATION_INTERVAL_MS` constant) but not yet wired into `engine.init()` as a setInterval. The dev provider's `restore()` always validates; the Apple/Google providers (V2.5) need the timer to call revalidate against their APIs. Day 5 wires the timer.
+- `StoredUnlock` is keyed on `token` (the receipt token), not on a synthetic `id`. This matches how real store receipts are identified and lets the table serve as the "what purchases has this device made" ledger directly.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 126/126 tests pass (94 V1 + 10 migration + 9 engine-subjects + 13 engine-iap). `npm run build` — 209.52 KB main bundle, 64.40 KB gzipped (under the 250 KB budget).
 
 #### Day 5 — Apple and Google IAP providers (web stubs)
 

@@ -89,8 +89,8 @@ export interface Receipt {
 }
 
 export interface StoredUnlock extends Receipt {
-  /** SHA-256 fingerprint of the device that made the purchase. Used to
-   *  invalidate the unlock if the user reinstalls on a different device. */
+  /** Device fingerprint used to invalidate the unlock on a different
+   *  device. Matches `deviceFingerprint()` in `iap/state.ts`. */
   deviceFingerprint: string;
 }
 

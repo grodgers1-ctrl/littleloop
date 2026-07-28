@@ -18,6 +18,9 @@
 // from `hooks.ts` — those hooks subscribe to engine events to drive
 // React renders.
 
+// IAP provider interfaces. The full interface lives in
+// `./iap/provider.ts`; we re-export here for convenience.
+
 import type {
   CreateSubjectInput,
   EngineEvent,
@@ -27,7 +30,6 @@ import type {
   ExportRequest,
   ExportResult,
   IapProduct,
-  PurchaseResult,
   ShareOptions,
   ShareResult,
   Subject,
@@ -48,20 +50,16 @@ import {
   runSandboxV1ToV2Migration,
   runV1ToV2Migration,
 } from "../db/migrations/v1-to-v2";
+import { loadEffectiveUnlock } from "./iap/state";
+import type { IapProvider } from "./iap/provider";
+
+// Re-export so consumers can `import { IapProvider } from "./engine"`.
+export type { IapProvider };
 
 // ---------------------------------------------------------------------------
 // Provider interfaces (declared here for type-completeness on Day 1;
 // concrete implementations land in subsequent days).
 // ---------------------------------------------------------------------------
-
-/** IAP provider. The dev implementation is selected in development;
- *  apple/google/stripe are stubbed on V2.0 and real in V2.5+. */
-export interface IapProvider {
-  isAvailable(): boolean;
-  buy(product: IapProduct): Promise<PurchaseResult>;
-  restore(): Promise<UnlockState>;
-  getUnlock(): Promise<UnlockState>;
-}
 
 /** Platform adapter. Browser implementation lands on Day 10–11. */
 export interface Platform {
@@ -135,8 +133,11 @@ export class Engine {
     // After migration, seed the in-memory subject cache.
     const subjects = await repoListSubjects();
     this.setSubjects(subjects);
-    // Day 4 loads the unlock state from IndexedDB and starts the
-    //   30-day revalidation timer.
+    // Day 4: load the unlock state from IndexedDB. The 30-day
+    // revalidation timer is wired in Day 5 once the Apple/Google
+    // providers exist; the dev provider always validates.
+    const effective = await loadEffectiveUnlock();
+    this.setUnlockState(effective.state);
     // Day 6 initialises the ad provider.
     this.ready = true;
     this.emit({ type: "ready" });
@@ -328,12 +329,19 @@ export class Engine {
   // IAP (filled in on Days 4 and 5)
   // -------------------------------------------------------------------------
 
-  async iapBuy(_product: IapProduct): Promise<UnlockState> {
-    throw new Error("Engine.iapBuy not implemented (Day 4)");
+  async iapBuy(product: IapProduct): Promise<UnlockState> {
+    const result = await this.iap.buy(product);
+    if (!result.ok) return this.getUnlockState();
+    // The provider persisted the receipt via iap/state.ts. Update
+    // the engine's cached state and notify subscribers.
+    this.setUnlockState(result.unlock);
+    return result.unlock;
   }
 
   async iapRestore(): Promise<UnlockState> {
-    throw new Error("Engine.iapRestore not implemented (Day 4)");
+    const state = await this.iap.restore();
+    this.setUnlockState(state);
+    return state;
   }
 
   // -------------------------------------------------------------------------

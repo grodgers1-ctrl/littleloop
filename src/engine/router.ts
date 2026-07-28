@@ -6,12 +6,17 @@ import { useCallback, useMemo, useState } from "react";
 import type { Subject } from "../db/schema";
 import { useEngine, useEngineReady } from "./hooks";
 
-export type V2RouteName = "home" | "subject" | "subject-settings";
+export type V2RouteName =
+  | "home"
+  | "subject"
+  | "subject-settings"
+  | "paywall";
 
 export type V2Route =
   | { name: "home" }
   | { name: "subject"; subjectId: string }
   | { name: "subject-settings"; subjectId: string }
+  | { name: "paywall"; source: "home" | "export-sheet" }
   // Forwarded to V1 screens from the V2 subject detail. The V2
   // subject screen narrows these to V1 Route on its own.
   | {

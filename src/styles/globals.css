@@ -581,3 +581,27 @@ img {
   white-space: nowrap;
   border: 0;
 }
+
+/* V2 — Paywall */
+.ll-paywall-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ll-paywall-price {
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: var(--ll-accent);
+}
+.ll-paywall-bullets {
+  margin: 8px 0 0 0;
+  padding-left: 18px;
+  color: var(--ll-text-soft);
+  font-size: 14px;
+}
+.ll-paywall-bullets li + li {
+  margin-top: 4px;
+}

@@ -19,7 +19,7 @@ class LittleLoopSandboxDB extends Dexie {
   entries!: EntityTable<Entry, "id">;
   assets!: EntityTable<Asset, "id">;
   subjects!: EntityTable<Subject, "id">;
-  unlocks!: EntityTable<StoredUnlock, "id">;
+  unlocks!: EntityTable<StoredUnlock, "token">;
 
   constructor(name = SANDBOX_DB_NAME) {
     super(name);
@@ -33,7 +33,7 @@ class LittleLoopSandboxDB extends Dexie {
       entries: "&id, projectId, [projectId+periodKey], capturedDate",
       assets: "&id, projectId, type",
       subjects: "&id, name, type, sortIndex",
-      unlocks: "&id, platform, product",
+      unlocks: "&token, platform, product",
     });
   }
 }

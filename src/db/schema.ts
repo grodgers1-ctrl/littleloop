@@ -119,12 +119,12 @@ export interface Subject {
   sortIndex: number;
 }
 
-/** Indexed unlock state. One row per device per active purchase. */
+/** Indexed unlock state. The token (per-receipt) is the primary key. */
 export interface StoredUnlock {
-  id: string;
+  /** Receipt token — also the primary key. Unique per purchase. */
+  token: string;
   platform: "apple" | "google" | "stripe";
   product: "clean" | "studio";
-  token: string;
   /** ISO datetime. */
   purchasedAt: string;
   /** ISO datetime. */

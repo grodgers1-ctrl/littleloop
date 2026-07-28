@@ -1,44 +1,48 @@
-// V2.0 engine provider stubs. Day 1 wires the skeleton so the engine
-// boundary exists end to end; concrete implementations land on later
-// days. Each provider is intentionally minimal — enough for the
-// engine to construct and `init()` to resolve without errors, so the
-// V1 app keeps working unchanged through Day 7.
+// Provider factories for the V2.0 engine boundary. Each factory
+// returns the concrete implementation the engine consumes via
+// the `IapProvider` / `Platform` / `AdProvider` interfaces.
 //
-// DO NOT add real IAP / share / ads logic here. Day 4 does IAP, Day
-// 10–11 does platform, Day 6 does ads.
+// On Day 4 the dev IAP provider is wired (it simulates a real store
+// end to end). The platform adapter and the ad provider remain
+// Day 1 stubs; they land on Days 10–11 and Day 6 respectively.
 
-import type {
-  AdProvider,
-  IapProvider,
-  Platform,
-} from "./engine";
-import type {
-  IapProduct,
-  PurchaseResult,
-  ShareOptions,
-  ShareResult,
-  UnlockState,
-} from "./state";
+import type { AdProvider, IapProvider, Platform } from "./engine";
+import { createDevIapProvider } from "./iap/dev";
+import { readIapFeatureFlags } from "./feature-flags";
 
-/** Dev IAP provider. Day 4 fills in the real `getUnlock()` read/write
- *  and the receipt store. For Day 1 it just reports `isAvailable() =
- *  false` so the paywall (when it lands) shows "coming soon" rather
- *  than offering a dev-grant unlock. */
-export function createDevIapProvider(): IapProvider {
-  return {
-    isAvailable: () => false,
-    buy: (_product: IapProduct): Promise<PurchaseResult> =>
-      Promise.resolve({ ok: false, reason: "unavailable" }),
-    restore: (): Promise<UnlockState> => Promise.resolve("free"),
-    getUnlock: (): Promise<UnlockState> => Promise.resolve("free"),
-  };
+/** Create the IAP provider for the current build.
+ *
+ *  Day 4: dev provider, available iff `import.meta.env.DEV` and
+ *    none of the `VITE_IAP_*` flags are set.
+ *
+ *  Day 5 (and later): the Apple / Google / Stripe stubs become
+ *    selectable via `VITE_IAP_APPLE_ENABLED`, `VITE_IAP_GOOGLE_ENABLED`,
+ *    and `VITE_IAP_STRIPE_ENABLED`. When any of those flags is true,
+ *    the corresponding provider is returned (in priority order
+ *    Apple > Google > Stripe). When all flags are false, the dev
+ *    provider is the only option in development; production has no
+ *    providers and the paywall renders "coming soon".
+ *
+ *  The day-5 selection logic intentionally lives here in the same
+ *  factory so adding the real providers is a one-file change. */
+export function createIapProvider(): IapProvider {
+  const flags = readIapFeatureFlags();
+  const anyFlag = flags.apple || flags.google || flags.stripe;
+  if (anyFlag) {
+    // Day 5 will instantiate the Apple/Google/Stripe stubs here.
+    // For Day 4 we still return the dev provider so the architecture
+    // is exercised end-to-end, but with `available: false` so the
+    // paywall shows "coming soon".
+    return createDevIapProvider({ available: false });
+  }
+  return createDevIapProvider();
 }
 
 /** Stub platform adapter. Day 10 implements camera-roll, Day 11
  *  implements share, Day 12 implements file-system. */
 export function createBrowserPlatform(): Platform {
   return {
-    share: (_blob: Blob, _filename: string, _options: ShareOptions): Promise<ShareResult> =>
+    share: (_blob: Blob, _filename: string, _options): Promise<{ shared: false; reason: "cancelled" | "unavailable" }> =>
       Promise.resolve({ shared: false, reason: "unavailable" }),
     saveToCameraRoll: (_blob: Blob, _filename: string): Promise<boolean> =>
       Promise.resolve(false),

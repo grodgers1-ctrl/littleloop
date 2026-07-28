@@ -8,6 +8,7 @@ import { Button } from "../components/Button";
 import { V2HomeScreen } from "./home/V2HomeScreen";
 import { V2SubjectScreen } from "./subject/V2SubjectScreen";
 import { V2SubjectSettingsScreen } from "./subject/V2SubjectSettingsScreen";
+import { PaywallScreen } from "./iap/PaywallScreen";
 import {
   useV2Router,
   type V2Route,
@@ -73,6 +74,12 @@ function V2Shell() {
       headerTitle = subject.name;
       showBack = true;
     }
+  } else if (route.name === "paywall") {
+    body = (
+      <PaywallScreen source={route.source} onClose={() => navigate({ name: "home" } satisfies V2Route)} />
+    );
+    headerTitle = "Unlock Little Loop";
+    showBack = true;
   } else {
     // V2-only routes that aren't yet handled (capture-preview,
     // import-date, export-config). Day 8 wires these through the
