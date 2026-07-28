@@ -19,6 +19,7 @@ import { SUBJECT_TYPES } from "../../engine/state";
 import type { Subject, SubjectType } from "../../engine/state";
 import { AddSubjectSheet } from "./AddSubjectSheet";
 import { AdBanner } from "./AdBanner";
+import { MemoryLane } from "../memory-lane/MemoryLane";
 
 const TYPE_LABELS: Record<SubjectType, string> = {
   baby: "Baby",
@@ -264,9 +265,11 @@ interface Props {
   onRestore?: () => void;
   /** Navigate to the app-wide Settings screen. */
   onSettings?: () => void;
+  /** Navigate to a specific entry (timeline view). */
+  onOpenEntry?: (subjectId: string, entryId: string) => void;
 }
 
-export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings, onRestore, onSettings }: Props) {
+export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings, onRestore, onSettings, onOpenEntry }: Props) {
   const subjects = useSubjects();
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -302,6 +305,17 @@ export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings, onRestore, 
                     ) : null}
         </div>
       </div>
+
+      {/* V2.5 — "On this day" memory lane. Renders nothing when
+          no past-year entries match today. */}
+      {subjects.length > 0 ? (
+        <MemoryLane
+          onOpenEntry={
+            onOpenEntry ??
+            ((subjectId) => onOpenSubject(subjectId))
+          }
+        />
+      ) : null}
 
       {subjects.length === 0 ? (
         <div className="ll-card">
