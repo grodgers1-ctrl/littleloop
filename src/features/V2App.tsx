@@ -49,6 +49,7 @@ function V2Shell() {
         onOpenSubjectSettings={(id) =>
           navigate({ name: "subject-settings", subjectId: id })
         }
+        onRestore={() => navigate({ name: "paywall", source: "home" } satisfies V2Route)}
       />
     );
     showBack = false;

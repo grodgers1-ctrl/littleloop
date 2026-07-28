@@ -11,6 +11,7 @@
 
 import { useState } from "react";
 import { Button } from "../../components/Button";
+import { CelebrationToast } from "../../components/CelebrationToast";
 import { useEngine, useUnlock } from "../../engine/hooks";
 import type { IapProduct, UnlockState } from "../../engine/state";
 
@@ -61,6 +62,7 @@ export function PaywallScreen({ onClose, source }: Props) {
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const isAvailable = engine.iap.isAvailable();
 
@@ -69,6 +71,12 @@ export function PaywallScreen({ onClose, source }: Props) {
     setBusy(product);
     try {
       await engine.iapBuy(product);
+      // Post-purchase toast. The message stays until dismissed.
+      if (product === "studio") {
+        setToast("Welcome to Studio!");
+      } else {
+        setToast("Welcome to Clean exports!");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not complete purchase.");
     } finally {
@@ -186,6 +194,13 @@ export function PaywallScreen({ onClose, source }: Props) {
       </div>
 
       <Button onClick={onClose}>Back</Button>
+
+      <CelebrationToast
+        open={Boolean(toast)}
+        message={toast ?? ""}
+        detail="The watermark and banner ad are now removed."
+        onClose={() => setToast(null)}
+      />
     </div>
   );
 }

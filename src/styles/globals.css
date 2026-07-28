@@ -752,3 +752,20 @@ img {
   color: var(--ll-text-soft);
   margin-top: 8px;
 }
+
+/* V2 — Restore purchases link on home screen. */
+.ll-restore-link {
+  background: transparent;
+  border: 0;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ll-accent);
+  cursor: pointer;
+  text-align: center;
+  display: block;
+  width: 100%;
+}
+.ll-restore-link:hover {
+  text-decoration: underline;
+}

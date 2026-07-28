@@ -260,9 +260,11 @@ function SubjectTile({
 interface Props {
   onOpenSubject: (id: string) => void;
   onOpenSubjectSettings: (id: string) => void;
+  /** Navigate to the paywall's restore section. */
+  onRestore?: () => void;
 }
 
-export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings }: Props) {
+export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings, onRestore }: Props) {
   const subjects = useSubjects();
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -326,6 +328,13 @@ export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings }: Props) {
             />
           ))}
           <AdBanner />
+          <button
+            type="button"
+            className="ll-restore-link"
+            onClick={() => onRestore?.()}
+          >
+            Restore purchases
+          </button>
         </div>
       )}
 

@@ -813,7 +813,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 ### Week 3: Polish, accessibility, ship
 
-#### Day 15 — Paywall polish
+#### Day 15 — Paywall polish ✅ done 2026-07-28
 
 **Morning**
 - Build the post-purchase "Welcome to Studio" toast (or "Welcome to Clean exports" for £1.99). The toast appears once per purchase, dismissable, never shown again.
@@ -826,6 +826,18 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - This prevents the simplest "refund abuse" vector: re-install after a refund.
 
 **End-of-day check**: The post-purchase flow is smooth. Restore purchases works on the same device and is required on a new device.
+
+**Day 15 shipped**:
+- `src/features/iap/PaywallScreen.tsx` — added post-purchase `CelebrationToast` that shows "Welcome to Studio!" or "Welcome to Clean exports!" after a successful purchase. The toast auto-dismisses after 6s or on tap. The existing Restore purchases success/failure states remained unchanged (they were already implemented).
+- `src/features/home/V2HomeScreen.tsx` — added a "Restore purchases" link below the AdBanner. The link calls a new optional `onRestore` callback prop, which V2App wires to navigate to the PaywallScreen.
+- `src/features/V2App.tsx` — passes `onRestore` to V2HomeScreen that navigates to the paywall.
+- `src/styles/globals.css` — added `.ll-restore-link` styles (accent-colored, centered, full-width, cursor-pointer).
+
+**Deviations from plan**:
+- The per-device fingerprint was already implemented on Day 4 in `iap/state.ts` (`deviceFingerprint()`, `loadEffectiveUnlock()`). The plan's afternoon scope was completed on Day 4. No additional fingerprint work was needed.
+- The "Restore purchases" button in the V1 Settings screen is NOT added — the V1 Settings screen still uses its existing restore flow (which triggers the V1 backup restore). The V2 restore flow goes through V2App → PaywallScreen. This aligns with the Day 14 V2App swap.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 194/194 tests pass. `npm run build` — 191.59 KB main bundle, 60.34 KB gzipped (well under 250 KB budget).
 
 #### Day 16 — Settings screen
 
