@@ -1,8 +1,8 @@
 // V2 Home Screen. A vertical list of subject tiles. Each tile shows:
 //
 //   - The most recent entry's image as a small thumbnail
-//   - The subject name
-//   - The subject type (icon + label)
+//   - The subject name (tap to rename inline)
+//   - The subject type (tap to cycle through the 8 types)
 //   - The cadence ("daily" / "weekly")
 //   - The entry count
 //
@@ -11,12 +11,14 @@
 // then this component is wired only by V2App (a separate shell, not
 // the main entry).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/Button";
 import { useEngine, useSubjects } from "../../engine/hooks";
 import { getDb } from "../../db/database";
+import { SUBJECT_TYPES } from "../../engine/state";
 import type { Subject, SubjectType } from "../../engine/state";
 import { AddSubjectSheet } from "./AddSubjectSheet";
+import { AdBanner } from "./AdBanner";
 
 const TYPE_LABELS: Record<SubjectType, string> = {
   baby: "Baby",
@@ -33,11 +35,21 @@ interface SubjectTileProps {
   subject: Subject;
   onOpen: (id: string) => void;
   onSettings: (id: string) => void;
+  /** Disable inline editing (used by tests and the settings screen). */
+  readonly?: boolean;
 }
 
-function SubjectTile({ subject, onOpen, onSettings }: SubjectTileProps) {
+function SubjectTile({
+  subject,
+  onOpen,
+  onSettings,
+  readonly,
+}: SubjectTileProps) {
+  const engine = useEngine();
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [entryCount, setEntryCount] = useState<number>(0);
+  const [dragging, setDragging] = useState(false);
+  const [dragOver, setDragOver] = useState<"top" | "bottom" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +80,48 @@ function SubjectTile({ subject, onOpen, onSettings }: SubjectTileProps) {
     };
   }, [subject.id, subject.updatedAt]);
 
+  // Inline rename — local draft state until blur or Enter.
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState(subject.name);
+  const draftInputRef = useRef<HTMLInputElement | null>(null);
+
+  function startRename() {
+    if (readonly) return;
+    setDraftName(subject.name);
+    setRenaming(true);
+  }
+
+  useEffect(() => {
+    if (renaming && draftInputRef.current) {
+      draftInputRef.current.focus();
+      draftInputRef.current.select();
+    }
+  }, [renaming]);
+
+  async function commitRename() {
+    const next = draftName.trim();
+    setRenaming(false);
+    if (!next || next === subject.name) return;
+    try {
+      await engine.renameSubject(subject.id, next);
+    } catch {
+      // Engine surfaces errors via the snackbar / error path; for
+      // Day 6 we swallow inline errors and revert on the next render.
+    }
+  }
+
+  // Inline reclassify — tap the type label to cycle through the 8 types.
+  async function cycleType() {
+    if (readonly) return;
+    const idx = SUBJECT_TYPES.indexOf(subject.type);
+    const nextType = SUBJECT_TYPES[(idx + 1) % SUBJECT_TYPES.length];
+    try {
+      await engine.reclassifySubject(subject.id, nextType);
+    } catch {
+      /* swallow; UI re-renders on next engine event */
+    }
+  }
+
   const cadenceLabel = subject.cadence === "daily" ? "Daily" : "Weekly";
   const countLabel =
     entryCount === 0
@@ -77,42 +131,129 @@ function SubjectTile({ subject, onOpen, onSettings }: SubjectTileProps) {
         : `${entryCount} moments`;
 
   return (
-    <button
-      type="button"
-      className="ll-subject-tile"
-      onClick={() => onOpen(subject.id)}
+    <div
+      className={`ll-subject-tile ${dragOver ? `ll-subject-tile-drop-${dragOver}` : ""} ${dragging ? "is-dragging" : ""}`}
+      draggable={!readonly}
+      onDragStart={(e) => {
+        setDragging(true);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", subject.id);
+      }}
+      onDragEnd={() => {
+        setDragging(false);
+        setDragOver(null);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const rect = e.currentTarget.getBoundingClientRect();
+        const halfway = rect.top + rect.height / 2;
+        setDragOver(e.clientY < halfway ? "top" : "bottom");
+      }}
+      onDragLeave={() => setDragOver(null)}
+      onDrop={async (e) => {
+        e.preventDefault();
+        const draggedId = e.dataTransfer.getData("text/plain");
+        const targetPos =
+          dragOver === "top" ? "before" : "after";
+        setDragOver(null);
+        setDragging(false);
+        if (!draggedId || draggedId === subject.id) return;
+        const subjects = engine.listSubjectsSync();
+        const fromIdx = subjects.findIndex((s) => s.id === draggedId);
+        const toIdx = subjects.findIndex((s) => s.id === subject.id);
+        if (fromIdx === -1 || toIdx === -1) return;
+        const target = targetPos === "before" ? toIdx : toIdx + 1;
+        await engine.moveSubject(draggedId, target);
+      }}
     >
-      <div className="ll-subject-tile-thumb" aria-hidden="true">
-        {thumbUrl ? (
-          <img src={thumbUrl} alt="" />
-        ) : (
-          <div className="ll-subject-tile-thumb-empty">
-            {subject.name.slice(0, 1).toUpperCase()}
-          </div>
-        )}
-      </div>
-      <div className="ll-subject-tile-body">
-        <div className="ll-subject-tile-name">{subject.name}</div>
-        <div className="ll-subject-tile-meta">
-          <span>{TYPE_LABELS[subject.type]}</span>
-          <span aria-hidden="true"> · </span>
-          <span>{cadenceLabel}</span>
-          <span aria-hidden="true"> · </span>
-          <span>{countLabel}</span>
-        </div>
-      </div>
       <button
         type="button"
-        className="ll-subject-tile-settings"
-        aria-label={`Open settings for ${subject.name}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onSettings(subject.id);
-        }}
+        className="ll-subject-tile-main"
+        onClick={() => onOpen(subject.id)}
+        aria-label={`Open ${subject.name}`}
       >
-        Settings
+        <div className="ll-subject-tile-thumb" aria-hidden="true">
+          {thumbUrl ? (
+            <img src={thumbUrl} alt="" />
+          ) : (
+            <div className="ll-subject-tile-thumb-empty">
+              {subject.name.slice(0, 1).toUpperCase()}
+            </div>
+          )}
+        </div>
+        <div className="ll-subject-tile-body">
+          <div className="ll-subject-tile-name-row">
+            <div className="ll-subject-tile-name-text" aria-label={subject.name}>
+              {subject.name}
+            </div>
+          </div>
+          <div className="ll-subject-tile-meta">
+            <span>{TYPE_LABELS[subject.type]}</span>
+            <span aria-hidden="true"> · </span>
+            <span>{cadenceLabel}</span>
+            <span aria-hidden="true"> · </span>
+            <span>{countLabel}</span>
+          </div>
+        </div>
       </button>
-    </button>
+      <div className="ll-subject-tile-actions">
+        {renaming ? (
+          <input
+            ref={draftInputRef}
+            className="ll-subject-tile-rename"
+            type="text"
+            value={draftName}
+            maxLength={60}
+            onChange={(e) => setDraftName(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitRename();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setRenaming(false);
+                setDraftName(subject.name);
+              }
+            }}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Rename subject"
+          />
+        ) : (
+          <button
+            type="button"
+            className="ll-subject-tile-rename-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              startRename();
+            }}
+            aria-label={`Rename ${subject.name}`}
+          >
+            Rename
+          </button>
+        )}
+        <button
+          type="button"
+          className="ll-subject-tile-type-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            cycleType();
+          }}
+          aria-label={`Change type (currently ${TYPE_LABELS[subject.type]})`}
+        >
+          Type: {TYPE_LABELS[subject.type]}
+        </button>
+        <button
+          type="button"
+          className="ll-subject-tile-settings"
+          aria-label={`Open settings for ${subject.name}`}
+          onClick={() => onSettings(subject.id)}
+        >
+          Settings
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -122,14 +263,16 @@ interface Props {
 }
 
 export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings }: Props) {
-  const engine = useEngine();
   const subjects = useSubjects();
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // Refresh on mount so the latest cache is shown.
-  useEffect(() => {
-    void engine.listSubjects();
-  }, [engine]);
+  // Note: we deliberately do NOT call engine.listSubjects() in a
+  // useEffect here. That would create a feedback loop:
+  //   useEffect → listSubjects() → setSubjects() → subjects-changed
+  //   → useSubjects re-renders → useEffect runs again.
+  // The engine already seeds the cache via init(), and any subsequent
+  // mutation (create / rename / reclassify / delete) emits
+  // subjects-changed, which keeps the React snapshot in sync.
 
   return (
     <div className="ll-content ll-stack-lg">
@@ -182,6 +325,7 @@ export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings }: Props) {
               onSettings={onOpenSubjectSettings}
             />
           ))}
+          <AdBanner />
         </div>
       )}
 

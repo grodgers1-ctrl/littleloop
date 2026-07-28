@@ -318,6 +318,40 @@ export class Engine {
     this.setSubjects(all);
   }
 
+  /**
+   * Move a subject to a new position in the sort order. The engine
+   * re-numbers every subject's sortIndex so the relative order is
+   * stable across the entire list (subject.id ends up at
+   * `targetIndex`, with the displaced subjects shifted up or down).
+   *
+   * Index bounds are clamped; out-of-range targets pin to the ends.
+   */
+  async moveSubject(id: string, targetIndex: number): Promise<void> {
+    const current = await repoListSubjects();
+    const from = current.findIndex((s) => s.id === id);
+    if (from === -1) return;
+    const clamped = Math.max(0, Math.min(targetIndex, current.length - 1));
+    if (from === clamped) return;
+    const reordered = [...current];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(clamped, 0, moved);
+    // Re-number sortIndex as 0..N-1 to keep the ordering stable.
+    const db = getDb();
+    const now = new Date().toISOString();
+    await db.transaction("rw", db.subjects, async () => {
+      for (let i = 0; i < reordered.length; i += 1) {
+        const subject = reordered[i];
+        await db.subjects.put({
+          ...subject,
+          sortIndex: i,
+          updatedAt: now,
+        });
+      }
+    });
+    const all = await repoListSubjects();
+    this.setSubjects(all);
+  }
+
   // -------------------------------------------------------------------------
   // Export (filled in on Day 8)
   // -------------------------------------------------------------------------

@@ -13,6 +13,7 @@ import { createGoogleIapProvider } from "./iap/google";
 import { createStripeIapProvider } from "./iap/stripe";
 import { readIapFeatureFlags } from "./feature-flags";
 import { currentPlatform } from "./platform/detect";
+import { createPlaceholderAdProvider } from "./ads/placeholder";
 
 /** Create the IAP provider for the current build + platform.
  *
@@ -64,14 +65,8 @@ export function createBrowserPlatform(): Platform {
   };
 }
 
-/** Stub ad provider. Day 6 fills in the placeholder banner and the
- *  frequency cap. */
-export function createPlaceholderAdProvider(): AdProvider {
-  return {
-    shouldShow: () => false,
-    impression: () => {
-      /* no-op */
-    },
-    lastImpressionAt: () => null,
-  };
+/** Ad provider. Day 6 implements the placeholder banner with a
+ *  30-minute frequency cap. */
+export function createAdProvider(): AdProvider {
+  return createPlaceholderAdProvider();
 }

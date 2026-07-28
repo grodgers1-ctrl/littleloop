@@ -605,3 +605,150 @@ img {
 .ll-paywall-bullets li + li {
   margin-top: 4px;
 }
+
+/* V2 — Drag-and-drop affordances on subject tiles. */
+.ll-subject-tile.is-dragging {
+  opacity: 0.5;
+}
+.ll-subject-tile-drop-top {
+  box-shadow: inset 0 3px 0 0 var(--ll-accent);
+}
+.ll-subject-tile-drop-bottom {
+  box-shadow: inset 0 -3px 0 0 var(--ll-accent);
+}
+
+/* V2 — Inline rename input on a subject tile. */
+.ll-subject-tile-rename {
+  font: inherit;
+  font-weight: 600;
+  font-size: 16px;
+  width: 100%;
+  border: 1px solid var(--ll-accent);
+  border-radius: var(--ll-radius);
+  padding: 2px 6px;
+  background: var(--ll-surface);
+  color: var(--ll-text);
+}
+.ll-subject-tile-name {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  font-size: 16px;
+  text-align: left;
+  cursor: text;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  width: 100%;
+}
+.ll-subject-tile-type {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ll-accent);
+  cursor: pointer;
+}
+.ll-subject-tile-type:hover {
+  text-decoration: underline;
+}
+
+/* V2 — Tile main button resets to inline-flex. */
+.ll-subject-tile-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+/* V2 — Subject tile layout (Day 6). The tile is a column flex with
+   the main row (thumb + name + meta) on top and an actions row
+   below. The actions row holds Rename, Type-cycle, and Settings. */
+.ll-subject-tile {
+  background: var(--ll-surface);
+  border: 1px solid var(--ll-border);
+  border-radius: var(--ll-radius-lg);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  color: inherit;
+}
+.ll-subject-tile-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ll-subject-tile-rename-btn,
+.ll-subject-tile-type-btn,
+.ll-subject-tile-settings {
+  background: transparent;
+  border: 1px solid var(--ll-border);
+  border-radius: var(--ll-radius);
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--ll-text-soft);
+  font: inherit;
+  font-size: 13px;
+}
+.ll-subject-tile-rename-btn:hover,
+.ll-subject-tile-type-btn:hover,
+.ll-subject-tile-settings:hover {
+  border-color: var(--ll-accent);
+  color: var(--ll-text);
+}
+
+/* V2 — Ad banner placeholder. */
+.ll-ad-banner {
+  background: var(--ll-surface-soft);
+  border: 1px solid var(--ll-border);
+  border-radius: var(--ll-radius-lg);
+  padding: 12px;
+  margin-top: 4px;
+}
+.ll-ad-banner-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.ll-ad-banner-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ll-text-soft);
+}
+.ll-ad-banner-headline {
+  font-size: 14px;
+  color: var(--ll-text);
+  margin-top: 2px;
+}
+.ll-ad-banner-cta {
+  background: var(--ll-accent);
+  color: var(--ll-on-accent, #fff);
+  border-radius: var(--ll-radius);
+  padding: 6px 12px;
+  font-size: 13px;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.ll-ad-banner-note {
+  font-size: 12px;
+  color: var(--ll-text-soft);
+  margin-top: 8px;
+}

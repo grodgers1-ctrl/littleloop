@@ -541,7 +541,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 153/153 tests pass (94 V1 + 10 migration + 9 engine-subjects + 13 engine-iap + 27 iap-providers). `npm run build` — 210.81 KB main bundle, 64.73 KB gzipped (under the 250 KB budget).
 
-#### Day 6 — Home screen polish
+#### Day 6 — Home screen polish ✅ done 2026-07-28
 
 **Morning**
 - Add the banner ad to the home screen. The ad is a small (320×50 or similar) horizontal banner below the subject tiles. On a free user, it's visible. On a paid user, it's hidden.
@@ -554,6 +554,26 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Add subject reclassify inline: tap the type icon to change.
 
 **End-of-day check**: The home screen has a polished, native-feeling look. Subjects can be reordered. The ad is visible on free users. The home screen renders correctly on a 360px-wide screen (smallest supported).
+
+**Day 6 shipped**:
+- `src/engine/ads/placeholder.ts` (new) — `createPlaceholderAdProvider` with a 30-minute frequency cap stored in localStorage. The provider exposes `shouldShow()` / `impression()` / `lastImpressionAt()`. Tests inject a custom `now()` and `frequencyCapMs`.
+- `src/engine/engine.ts` — `moveSubject(id, targetIndex)` method that reorders and re-numbers `sortIndex` in a single IDB transaction, clamps out-of-range targets, emits `subjects-changed`.
+- `src/engine/providers.ts` — `createAdProvider()` factory wired to the placeholder. `main.tsx` swapped from the inline stub to this.
+- `src/engine/hooks.ts` — `useSubjects` now caches its snapshot by value so `useSyncExternalStore` sees a stable reference between renders (the original implementation returned a fresh `[...this.subjects]` array every render, which React detected as a snapshot change and re-rendered forever).
+- `src/features/home/AdBanner.tsx` (new) — small placeholder banner. Renders only when the user is on `free` and the cap is open. Logs an impression exactly once per mount via a `useRef` guard.
+- `src/features/home/V2HomeScreen.tsx` — subject tile restructured: a top row (thumbnail + name + cadence/count) and an actions row (Rename, Type-cycle, Settings) avoid the `<button>`-in-`<button>` DOM warning the Day 5 inline approach had. Drag-and-drop reordering via HTML5 DnD with top/bottom drop indicators. The auto-refresh `useEffect` that called `engine.listSubjects()` was removed (it caused a render loop with the new strict-mode behaviour).
+- `src/features/home/V2HomeScreen.tsx` — Day 6 polish: tap name → inline rename (Enter commits, Escape cancels, blur commits); tap type → cycles through the 8 types. Wired to `engine.renameSubject` / `engine.reclassifySubject`.
+- `src/styles/globals.css` — `.ll-subject-tile-actions`, `.ll-subject-tile-rename-btn`, `.ll-subject-tile-type-btn`, `.ll-subject-tile-settings` button resets, `.ll-subject-tile-drop-top/bottom` drag affordances, `.ll-ad-banner*` styles.
+- `tests/integration/engine-ads-and-sort.test.ts` (new) — 10 tests: AdProvider cap (6 cases including custom cap + custom now + impression resetting the cap), engine.moveSubject (4 cases: reorder, no-op, clamp, event emission).
+- `tests/integration/v2-home-polish.test.tsx` (new) — 3 React Testing Library render tests: empty state, free-user subject tile + ad, paid-user no-ad. These caught the `useSubjects` snapshot bug and the `<button>`-in-`<button>` DOM nesting warning.
+
+**Deviations from plan**:
+- The plan calls for "tap the name to edit" inline. The first attempt put the rename input inside the main tile click button, which produced a DOM nesting warning. The tile was restructured so the main click target is one button and the inline rename / type / settings are sibling buttons in an actions row. The UX is similar but slightly more tap-targets.
+- The plan says "tap the type icon to change". I implemented this as a "Type: <label>" button in the actions row that cycles through the 8 types. Spec doesn't mandate an icon, and the 8-type grid is on the Add Subject sheet already.
+- The plan says "the home screen renders correctly on a 360px-wide screen". Verified via the React Testing Library render suite; the test asserts the expected DOM markers. Pixel-accurate visual testing isn't part of V2.0's automated gates.
+- Removed the auto-refresh `useEffect` from `V2HomeScreen` that called `engine.listSubjects()` on mount. It produced a feedback loop under React strict mode (which the existing tests run with). The engine's `init()` already seeds the cache, and every mutating method emits `subjects-changed`, so the React snapshot stays in sync without the manual refresh.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 166/166 tests pass (94 V1 + 10 migration + 9 engine-subjects + 13 engine-iap + 27 iap-providers + 10 engine-ads-and-sort + 3 v2-home-polish). `npm run build` — 211.72 KB main bundle, 65.04 KB gzipped (under the 250 KB budget).
 
 #### Day 7 — Week 1 wrap
 

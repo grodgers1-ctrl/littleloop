@@ -14,15 +14,15 @@ import "./styles/globals.css";
 // have already resolved (it's a no-op until Day 2 lands the migration).
 import { Engine, setEngine } from "./engine";
 import {
+  createAdProvider,
   createBrowserPlatform,
   createIapProvider,
-  createPlaceholderAdProvider,
 } from "./engine/providers";
 
 const engine = new Engine({
   iap: createIapProvider(),
   platform: createBrowserPlatform(),
-  ads: createPlaceholderAdProvider(),
+  ads: createAdProvider(),
 });
 setEngine(engine);
 // Fire-and-forget — Day 1 has no async init work. Day 2 turns this

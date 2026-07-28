@@ -8,7 +8,7 @@
 // the engine is constructed once at app boot and injected via
 // `setEngine()`.
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Engine, getEngine } from "./engine";
 import type {
   ExportProgress,
@@ -45,13 +45,56 @@ export function useEngineOrNull(): Engine | null {
 // useSubjects — reactive list of subjects.
 // ---------------------------------------------------------------------------
 
+/**
+ * useSubjects — reactive list of subjects.
+ *
+ * Uses `useSyncExternalStore` to subscribe to the engine's
+ * `subjects-changed` event. The snapshot returned to React must have
+ * a stable reference when the underlying data is unchanged, or
+ * `useSyncExternalStore` will detect a "change" and re-render in an
+ * infinite loop. We cache the last array by value and return the
+ * cached reference on every subsequent call that yields equal
+ * contents.
+ */
 export function useSubjects(): Subject[] {
   const engine = useEngine();
+  const cacheRef = useRef<Subject[]>([]);
   return useSyncExternalStore(
     (onChange) => engine.on("subjects-changed", onChange),
-    () => engine.listSubjectsSync(),
+    () => {
+      const next = engine.listSubjectsSync();
+      if (sameSubjectList(cacheRef.current, next)) {
+        return cacheRef.current;
+      }
+      cacheRef.current = next;
+      return next;
+    },
     () => [],
   );
+}
+
+/** Shallow-by-id-and-content equality. Sufficient for the
+ *  useSubjects hook — the engine keeps subjects in stable sort order
+ *  and mutates only via setSubjects(), which builds a new array. */
+function sameSubjectList(a: Subject[], b: Subject[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.name !== y.name ||
+      x.type !== y.type ||
+      x.cadence !== y.cadence ||
+      x.sortIndex !== y.sortIndex ||
+      x.updatedAt !== y.updatedAt ||
+      x.referenceImageBlobId !== y.referenceImageBlobId
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
