@@ -12,10 +12,11 @@
 //   - Always present on the free tier. Removed entirely on
 //     Clean or Studio.
 //
-// Implementation note: V2.0 ships the text-only version (no inline
-// ⌐ glyph). The text is small, low-opacity, and bottom-right — a
-// signature, not an ad. The spec says "or just the ⌐ icon if the
-// icon is available"; the icon is a V2.5 polish item.
+// Implementation note: V2.0 ships the ⌐ icon (Unicode 0x2310) plus
+// "little-loop" text. The spec says "or just the ⌐ icon if the
+// icon is available" — the Unicode character IS available in every
+// modern browser, so we always render it. The overflow-to-icon-only
+// path is a V2.5 polish item.
 
 export type WatermarkPosition = "bottom-right";
 
@@ -39,7 +40,7 @@ export interface WatermarkStyle {
 
 export const DEFAULT_WATERMARK_STYLE: WatermarkStyle = {
   position: "bottom-right",
-  text: "made with little-loop",
+  text: "\u2310 little-loop",
   fontSizePx: 18,
   opacity: 0.3,
 };

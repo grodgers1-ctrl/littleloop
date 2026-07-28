@@ -59,6 +59,7 @@ export function ExportSheet({
   const [speed, setSpeed] = useState<RenderSpeed>("fast");
   const [showDate, setShowDate] = useState(true);
   const [filenameOverride, setFilenameOverride] = useState("");
+  const [oneOffBypass, setOneOffBypass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,7 +78,7 @@ export function ExportSheet({
         speed,
         showDate,
         filenameOverride: filenameOverride.trim() || undefined,
-        forceNoWatermark: false,
+        forceNoWatermark: oneOffBypass,
       };
       const result = await engine.export(request, () => {
         // Progress is forwarded by the engine itself via the
@@ -240,6 +241,21 @@ export function ExportSheet({
               maxLength={80}
               onChange={(e) => setFilenameOverride(e.target.value)}
             />
+          </div>
+
+          <div className="ll-field">
+            <label className="ll-checkbox-row">
+              <input
+                type="checkbox"
+                checked={oneOffBypass}
+                onChange={(e) => setOneOffBypass(e.target.checked)}
+              />
+              <span>Remove watermark (one-off)</span>
+            </label>
+            <div className="ll-field-help">
+              Preview a clean export without paying. The watermark
+              returns on the next export.
+            </div>
           </div>
 
           {error || isError ? (

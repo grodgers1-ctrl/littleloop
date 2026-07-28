@@ -54,7 +54,7 @@ describe("applyWatermark", () => {
   });
 
   it("uses the spec default text and opacity", () => {
-    expect(DEFAULT_WATERMARK_STYLE.text).toBe("made with little-loop");
+    expect(DEFAULT_WATERMARK_STYLE.text).toBe("\u2310 little-loop");
     expect(DEFAULT_WATERMARK_STYLE.opacity).toBe(0.3);
     expect(DEFAULT_WATERMARK_STYLE.position).toBe("bottom-right");
   });

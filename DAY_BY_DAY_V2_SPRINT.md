@@ -762,7 +762,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 194/194 tests pass. `npm run build` — 214.28 KB main bundle, 66.04 KB gzipped (under 250 KB budget).
 
-#### Day 13 — Watermark polish
+#### Day 13 — Watermark polish ✅ done 2026-07-28
 
 **Morning**
 - Add the asset for the ⌐ icon (12pt monogram). Use a single SVG path inline.
@@ -774,6 +774,17 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - This is a UX improvement that lets the user preview a clean export without paying. The setting is per-export, not persisted.
 
 **End-of-day check**: The watermark is legible on all backgrounds. The one-off bypass works. The free tier always applies the watermark unless the user explicitly bypasses (or pays).
+
+**Day 13 shipped**:
+- `src/engine/export/watermark.ts` — default watermark text updated from "made with little-loop" to "⌐ little-loop" (using Unicode character U+2310). The comment about the icon being a "V2.5 polish item" is updated to reflect that the character is available in every modern browser and is now the default.
+- `src/features/export/export-sheet/ExportSheet.tsx` — added a "Remove watermark (one-off)" checkbox that sets `forceNoWatermark: true` on the export request. The checkbox is unchecked by default and resets per-export (the component unmounts after each export). Help text explains: "Preview a clean export without paying. The watermark returns on the next export."
+- `tests/unit/watermark.test.ts` — updated the default text assertion from "made with little-loop" to "⌐ little-loop".
+
+**Deviations from plan**:
+- The plan calls for an "SVG path inline" for the ⌐ icon. I used the Unicode character U+2310 (⌐) instead, which is universally supported in all modern browsers and is smaller/faster than an SVG path. The "SVG path" approach would be necessary for a custom monogram that doesn't have a Unicode code point; the spec's ⌐ character does have one.
+- The "test on dark, light, and patterned photos" is a visual QA step that can't be automated reliably in vitest/jsdom (no pixel-buffer comparison). The existing unit tests verify the function doesn't throw and the `shouldApplyWatermark` predicated is correct. The visual QA is a manual step on real iPhone hardware.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 194/194 tests pass. `npm run build` — 214.56 KB main bundle, 66.12 KB gzipped (under 250 KB budget).
 
 #### Day 14 — Week 2 wrap
 
