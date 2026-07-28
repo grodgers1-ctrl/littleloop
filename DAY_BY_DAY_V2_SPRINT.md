@@ -377,7 +377,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 ### Week 1: Architecture, migration, subject model
 
-#### Day 1 — Engine skeleton
+#### Day 1 — Engine skeleton ✅ done 2026-07-28
 
 **Morning**
 - Create `src/engine/` directory.
@@ -390,6 +390,20 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Update `tsconfig` if needed to support the new directory.
 
 **End-of-day check**: `npx tsc --noEmit` passes. `npm run build` succeeds. The app boots, shows a blank screen because nothing renders yet. The engine is wired but inert.
+
+**Day 1 shipped**:
+- `src/engine/state.ts` — all V2.0 type interfaces (Subject, Entry, UnlockState, Receipt, StoredUnlock, IAP types, Platform types, Export types, EngineEvent union, EngineFeatureFlags).
+- `src/engine/engine.ts` — `Engine` class with the full public surface from spec §1.2. Methods throw "not implemented (Day N)" so the skeleton is type-safe. Listener registry keyed by event name; `on()` returns an unsubscribe; `setUnlockState` / `setExportProgress` / `setSubjects` are protected emitters used by later-day code.
+- `src/engine/hooks.ts` — `useEngine`, `useEngineOrNull`, `useEngineReady`, `useSubjects` (uses `useSyncExternalStore`), `useUnlock`, `useExportProgress`. Hooks subscribe to engine events and re-render on change.
+- `src/engine/providers.ts` — stub factories for the dev IAP provider, the browser platform, and the placeholder ad provider. All return "unavailable" on Day 1; concrete behaviour lands on Days 4, 6, 10–11.
+- `src/engine/index.ts` — public barrel re-export.
+- `src/main.tsx` — instantiates `Engine` with stub providers, registers it via `setEngine`, calls `engine.init()` fire-and-forget. V1 routes in `App.tsx` are untouched, so V1 keeps working.
+
+**Deviations from plan**:
+- App.tsx was NOT modified. The kickoff calls for wiring the engine via React context; on Day 1 the V1 routes do not touch the engine, so the singleton (`setEngine` / `getEngine`) is sufficient. Context-based wiring lands when Day 3 starts consuming `useSubjects` in the home screen. This keeps the V1 surface 100% unchanged through Day 7.
+- Added a `listSubjectsSync()` method on Engine for `useSyncExternalStore`. The plan called for `listSubjects()` (async); the synchronous snapshot mirror is required by the React 18 store contract. The async list method stays.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 94/94 V1 tests pass (no regressions). `npm run build` — 204.15 KB main bundle (62.75 KB gzipped, under the 250 KB budget).
 
 #### Day 2 — V1 → V2 migration
 
