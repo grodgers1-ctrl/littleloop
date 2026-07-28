@@ -637,7 +637,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 181/181 tests pass (172 baseline + 9 new watermark tests). `npm run build` — 213.14 KB main bundle, 65.72 KB gzipped (under the 250 KB budget).
 
-#### Day 9 — Export sheet UI
+#### Day 9 — Export sheet UI ✅ done 2026-07-28
 
 **Morning**
 - Build the export sheet (`features/export/export-sheet/ExportSheet.tsx`). The sheet slides up from the bottom and has:
@@ -654,6 +654,22 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - The "Style" section is locked for non-Studio users with a "Get Studio for transitions" prompt. The prompt is a one-time per-session message.
 
 **End-of-day check**: The export sheet works end to end. The user can configure export options, see progress, and reach the result. The watermark is visible on free exports.
+
+**Day 9 shipped**:
+- `src/features/export/export-sheet/ExportSheet.tsx` (new) — modal bottom sheet with all V2 export controls: date range (all/this-month/custom with date inputs), speed (fast/standard/slow), style (locked for non-Studio users with upgrade prompt), show-date toggle, filename override, and Export button. Calls `engine.export()` on submit, shows progress via `useExportProgress` and `ProgressBar`, delegates to `onCompleted` when done. Handles errors in a status alert.
+- `src/features/export/export-sheet/ExportResultScreen.tsx` (new) — post-export result view with inline HTML5 `<video>` player (autoPlay, muted, loop, playsInline), Save to Photos button (delegates to `engine.saveToCameraRoll()` with download fallback), Share button (delegates to `engine.share()`), and back-to-home navigation. Both Save and Share are fully wired but delegate to stub providers on Day 9 (they return `false` / `unavailable`); Day 10 makes them real.
+- `src/engine/router.ts` — added `export-config` (launch the sheet), `export-progress` (show progress), `export-result` (show result) route variants with the `ExportResult` payload.
+- `src/features/V2App.tsx` — export-config route renders the ExportSheet; export-result route renders the ExportResultScreen.
+- `src/features/export/export-worker.ts` — `drawFrame` now accepts an optional `extraDraw` callback, invoked after the photo + date label are drawn but before PNG encoding. This is the V2 watermark extension point. The V1 surface is unchanged: callers that don't pass `extraDraw` get the same behaviour.
+- `src/workers/video-render.worker.ts` — `RenderRequest` gains an optional `extraDraw?: ExtraDrawFn` field. `ExtraDrawFn` is exported so the V2 engine can type-check the hook.
+- `src/engine/export/engine.ts` — replaced the `reEncodeWithWatermark` stub with the real `extraDraw` hook. Free-tier exports now pass `applyWatermark` as the per-frame hook; Clean and Studio exports skip it entirely. The old `reEncodeWithWatermark` function is removed.
+
+**Deviations from plan**:
+- The plan says "The sheet replaces the V1 export screen's config UI. The V1 screen is still a route (`/export`) that opens the sheet." V1's `ExportScreen.tsx` is unchanged. The V2 sheet is a separate component that V2App renders at the `export-config` route. V1 users continue to see the V1 export screen. Day 14 unifies them.
+- The entryCount label on the sheet shows "0 captured" (the value is hard-coded as 0 in V2App's export-config route handler). Day 10 reads the actual count from the engine's subject cache.
+- The "Style" section is behind a locked card with the upgrade prompt. The spec says "one-time per-session message" — in V2.0 it's a permanent card. The V2.5 creative content makes it functional.
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 181/181 tests pass. `npm run build` — 213.16 KB main bundle, 65.74 KB gzipped (under 250 KB budget).
 
 #### Day 10 — Camera roll save
 

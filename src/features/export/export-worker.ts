@@ -66,6 +66,7 @@ function drawFrame(
   ctx: CanvasRenderingContext2D,
   bitmap: ImageBitmap,
   showDate: string | null,
+  extraDraw?: (ctx: CanvasRenderingContext2D) => void,
 ): void {
   ctx.fillStyle = BG_COLOR;
   ctx.fillRect(0, 0, FRAME_W, FRAME_H);
@@ -80,6 +81,10 @@ function drawFrame(
     ctx.textBaseline = "middle";
     ctx.fillText(showDate, FRAME_W / 2, FRAME_H - 48);
   }
+  // V2 extension hook: draw the watermark (or anything else) on
+  // top of the frame content. Runs on the main thread before PNG
+  // encoding, so the worker only sees the resulting bytes.
+  if (extraDraw) extraDraw(ctx);
 }
 
 // Convert the canvas contents to a PNG Uint8Array. Uses canvas.toBlob
@@ -215,7 +220,7 @@ export async function runExport(
       throw new Error(`Image ${idx + 1} could not be decoded.`);
     }
     const showDate = request.showDates ? src.capturedDate : null;
-    drawFrame(ctx, bitmap, showDate);
+    drawFrame(ctx, bitmap, showDate, request.extraDraw);
 
     for (let f = 0; f < framesPerImage; f += 1) {
       const png = await canvasToPng(host);

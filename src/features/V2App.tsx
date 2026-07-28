@@ -9,6 +9,8 @@ import { V2HomeScreen } from "./home/V2HomeScreen";
 import { V2SubjectScreen } from "./subject/V2SubjectScreen";
 import { V2SubjectSettingsScreen } from "./subject/V2SubjectSettingsScreen";
 import { PaywallScreen } from "./iap/PaywallScreen";
+import { ExportSheet } from "./export/export-sheet/ExportSheet";
+import { ExportResultScreen } from "./export/export-sheet/ExportResultScreen";
 import {
   useV2Router,
   type V2Route,
@@ -79,6 +81,44 @@ function V2Shell() {
       <PaywallScreen source={route.source} onClose={() => navigate({ name: "home" } satisfies V2Route)} />
     );
     headerTitle = "Unlock Little Loop";
+    showBack = true;
+  } else if (route.name === "export-config") {
+    const subject = currentSubject(route.subjectId);
+    const subjectName = subject?.name ?? "subject";
+    // The home screen already shows the entry count on the tile;
+    // the export sheet uses entryCount as a label ("N captured").
+    // For Day 9 we pass 0 (informational); the sheet is still
+    // functional — it exports whatever entries exist in the range.
+    // Day 10 reads the actual count from the engine.
+    const entryCount = 0;
+    body = (
+      <ExportSheet
+        open={true}
+        subjectId={route.subjectId}
+        subjectName={subjectName}
+        entryCount={entryCount}
+        onCompleted={(result) =>
+          navigate({
+            name: "export-result",
+            result,
+            subjectName,
+            subjectId: route.subjectId,
+          } satisfies V2Route)
+        }
+        onClose={() => navigate({ name: "home" } satisfies V2Route)}
+      />
+    );
+    headerTitle = subjectName;
+    showBack = true;
+  } else if (route.name === "export-result") {
+    body = (
+      <ExportResultScreen
+        result={route.result}
+        subjectName={route.subjectName}
+        onBack={() => navigate({ name: "home" } satisfies V2Route)}
+      />
+    );
+    headerTitle = "Export complete";
     showBack = true;
   } else {
     // V2-only routes that aren't yet handled (capture-preview,

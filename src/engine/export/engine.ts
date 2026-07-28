@@ -26,7 +26,7 @@ import {
   type ExportRequest,
   type ExportResult,
 } from "../state";
-import { shouldApplyWatermark } from "./watermark";
+import { applyWatermark, shouldApplyWatermark } from "./watermark";
 
 /** Pull the entries for a subject within a date range, sorted
  *  oldest-first (the V1 export expects chronological order). */
@@ -148,16 +148,8 @@ export async function runExport(
   );
 
   // Phase 2: drawing — render frames to canvas, applying the
-  // watermark on the main thread before PNG encoding. We delegate
-  // to the V1 export module, which uses a singleton worker for
-  // FFmpeg. The watermark is applied by a small wrapper that
-  // monkey-patches `canvasToPng` so every frame gets marked before
-  // it leaves the canvas.
-  //
-  // IMPORTANT: we DON'T mutate the V1 export-worker.ts. Instead, we
-  // build a V1-compatible RenderRequest and let runExport render
-  // the canvas; then we re-render the watermark onto the same canvas
-  // before each PNG encoding via the per-frame getImage hook below.
+  // watermark on the main thread before PNG encoding via the
+  // `extraDraw` hook in the V1 RenderRequest.
   onProgress({ phase: "drawing", ratio: 0.05, message: "Drawing frames…" });
 
   const useWatermark = shouldApplyWatermark(
@@ -185,20 +177,18 @@ export async function runExport(
     speedSeconds: speedToSeconds(request.speed),
     showDates: request.showDate,
     exportFilename: filename,
+    // Per-frame hook: draws the watermark on the canvas before PNG
+    // encoding. Runs on the main thread; the worker only sees the
+    // resulting bytes. Only wired in for free-tier exports; Clean
+    // and Studio skip it.
+    extraDraw: useWatermark
+      ? (ctx: CanvasRenderingContext2D) => applyWatermark(ctx)
+      : undefined,
   };
 
   const total = entryBytes.length;
   let drawn = 0;
 
-  // Wrap the V1 export so we can apply the watermark on the same
-  // canvas the V1 module uses, just before PNG encoding. We do this
-  // by hoisting a tiny module-scoped hook into the V1 module's
-  // surface. The V1 module is unaware of the watermark; it just
-  // produces PNGs.
-  //
-  // For Day 8, the V1 module does not expose a per-frame hook. The
-  // watermark is therefore drawn by post-processing each frame's
-  // PNG. We inline that pass here.
   const v1Result = await runExportV1(v1Request, async (idx: number) => {
     const src = entryBytes[idx];
     if (!src) return null;
@@ -217,57 +207,11 @@ export async function runExport(
 
   onProgress({ phase: "encoding", ratio: 0.95, message: "Encoding MP4…" });
 
-  // If the user is on free tier, post-process the MP4 isn't possible
-  // (MP4 is a finished encoding). The watermark on V2.0 is therefore
-  // applied by re-encoding through the V1 export with a wrapper
-  // that draws the watermark on the canvas before PNG encoding.
-  //
-  // The cleanest V2 path is to extend the V1 module's drawFrame
-  // helper to take an optional `extraDraw: (ctx) => void` callback.
-  // For Day 8 we ship the watermark on the OUTPUT: we re-decode
-  // each PNG, draw it on a fresh canvas with the watermark, and
-  // re-encode. This is more expensive than drawing inline, but it
-  // works without modifying the V1 worker protocol.
-  let finalBlob: Blob = v1Result.blob;
-  if (useWatermark) {
-    finalBlob = await reEncodeWithWatermark(
-      v1Result.blob,
-      request.subjectId,
-      onProgress,
-    );
-  }
-
   onProgress({ phase: "done", ratio: 1, message: "Done" });
   return {
-    blob: finalBlob,
+    blob: v1Result.blob,
     filename: filename,
     frameCount: total,
     durationMs: Date.now() - start,
   };
-}
-
-/** Re-encode the V1-produced MP4 with the watermark baked in. We
- *  re-render each PNG onto a fresh canvas, draw the watermark,
- *  then pipe the resulting PNGs back through the V1 export. */
-async function reEncodeWithWatermark(
-  _sourceMp4: Blob,
-  _subjectId: string,
-  onProgress: (p: ExportProgress) => void,
-): Promise<Blob> {
-  // Day 8 ships the watermark inline via the canvas drawFrame
-  // extension point. We don't yet implement MP4→PNG→watermark→
-  // PNG→MP4 because that requires an MP4 demuxer in the test env,
-  // which we don't have. The Day 8 plan covers the watermark DRAW
-  // PATH; the inline integration lands on Day 9 alongside the
-  // export sheet UI. For Day 8 the test is "watermark function
-  // draws correctly on a canvas", which is covered by
-  // tests/unit/watermark.test.ts.
-  onProgress({
-    phase: "encoding",
-    ratio: 0.97,
-    message:
-      "Watermark will be drawn inline with frames (Day 9 wiring). " +
-      "Function verified by unit tests.",
-  });
-  return _sourceMp4;
 }

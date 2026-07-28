@@ -43,7 +43,18 @@ export interface RenderRequest {
   showDates: boolean;
   childName: string;
   exportFilename: string;
+  /**
+   * Optional per-frame draw hook invoked by the renderer AFTER the
+   * photo + date label are drawn but BEFORE PNG encoding. The V2
+   * engine uses this to apply the watermark on the main thread.
+   * V1 callers leave it undefined.
+   */
+  extraDraw?: ExtraDrawFn;
 }
+
+/** A function that draws onto the host canvas after the V1 frame
+ *  content is on it. Used for the V2 watermark. */
+export type ExtraDrawFn = (ctx: CanvasRenderingContext2D) => void;
 
 export interface RenderProgress {
   phase: "preparing" | "rendering" | "finalizing";

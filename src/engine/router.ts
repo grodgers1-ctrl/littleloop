@@ -10,13 +10,19 @@ export type V2RouteName =
   | "home"
   | "subject"
   | "subject-settings"
-  | "paywall";
+  | "paywall"
+  | "export-config"
+  | "export-progress"
+  | "export-result";
 
 export type V2Route =
   | { name: "home" }
   | { name: "subject"; subjectId: string }
   | { name: "subject-settings"; subjectId: string }
   | { name: "paywall"; source: "home" | "export-sheet" }
+  | { name: "export-config"; subjectId: string }
+  | { name: "export-progress"; subjectId: string }
+  | { name: "export-result"; result: import("../engine/state").ExportResult; subjectName: string; subjectId: string }
   // Forwarded to V1 screens from the V2 subject detail. The V2
   // subject screen narrows these to V1 Route on its own.
   | {
@@ -35,8 +41,7 @@ export type V2Route =
       suggestedDate: string;
       blob: Blob;
       replaceEntryId?: string;
-    }
-  | { name: "export-config"; subjectId: string };
+    };
 
 export const INITIAL_V2_ROUTE: V2Route = { name: "home" };
 
