@@ -688,6 +688,7 @@ img {
   gap: 8px;
   width: 100%;
   color: inherit;
+  touch-action: manipulation;
 }
 .ll-subject-tile-actions {
   display: flex;
@@ -720,6 +721,18 @@ img {
   border-radius: var(--ll-radius-lg);
   padding: 12px;
   margin-top: 4px;
+}
+
+/* Respect reduced motion preference — disable animations for users
+   with motion sensitivity. V2.5 transitions hook into this too. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 .ll-ad-banner-body {
   display: flex;
