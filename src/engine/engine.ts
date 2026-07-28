@@ -60,6 +60,8 @@ import {
   REVALIDATION_INTERVAL_MS,
 } from "./iap/state";
 import type { IapProvider } from "./iap/provider";
+import type { NotificationProvider } from "./notifications";
+import { BrowserLocal } from "./notifications";
 
 // Re-export so consumers can `import { IapProvider } from "./engine"`.
 export type { IapProvider };
@@ -103,6 +105,8 @@ export class Engine {
   readonly iap: IapProvider;
   readonly platform: Platform;
   readonly ads: AdProvider;
+  /** V2.5 — local notifications provider. BrowserLocal by default. */
+  readonly notifications: NotificationProvider;
 
   /** Simple listener registry keyed by event name. */
   private listeners: Map<EngineEventName, Set<EngineEventHandler<EngineEventName>>> = new Map();
@@ -111,10 +115,12 @@ export class Engine {
     iap: IapProvider;
     platform: Platform;
     ads: AdProvider;
+    notifications?: NotificationProvider;
   }) {
     this.iap = deps.iap;
     this.platform = deps.platform;
     this.ads = deps.ads;
+    this.notifications = deps.notifications ?? new BrowserLocal();
   }
 
   // -------------------------------------------------------------------------
@@ -443,53 +449,45 @@ export class Engine {
    * Request the user's permission to show local notifications. Returns
    * `true` when granted, `false` otherwise. Idempotent: safe to call
    * repeatedly; the browser collapses overlapping requests.
-   *
-   * Day 1 ships the stub. The concrete `NotificationProvider` (browser
-   * local) is built on Day 6.
    */
   async requestNotificationPermission(): Promise<boolean> {
-    throw new Error(
-      "Engine.requestNotificationPermission not implemented (Day 6)",
-    );
+    const result = await this.notifications.requestPermission();
+    return result === "granted";
   }
 
   /**
    * Schedule the next local notification according to the user's
    * cadence + time-of-day. The browser implementation persists the
    * next-due timestamp in IndexedDB so a page reload can re-schedule.
-   *
-   * Day 6 wires the schedule storage; the engine exposes this method
-   * already so the V2.5 settings UI can be wired against it.
    */
-  async scheduleNotifications(_opts: ScheduleOpts): Promise<void> {
-    throw new Error("Engine.scheduleNotifications not implemented (Day 6)");
+  async scheduleNotifications(opts: ScheduleOpts): Promise<void> {
+    await this.notifications.schedule(opts);
   }
 
   /**
    * Cancel any pending local notifications. Idempotent.
    */
   async cancelNotifications(): Promise<void> {
-    throw new Error("Engine.cancelNotifications not implemented (Day 6)");
+    await this.notifications.cancel();
   }
 
   /**
    * Subscribe to in-app notification ticks. The browser fires
-   * `cb()` whenever a scheduled notification matches the current
-   * moment (the `setTimeout` chain in the BrowserLocal provider
-   * drives this). Returns an unsubscribe function.
-   *
-   * This is the unified event for the in-app banner UI; the
-   * listener pattern matches the engine's existing `on(event, handler)`
-   * shape but stays typed as a separate channel because notifications
-   * have a different payload.
+   * `cb()` whenever a scheduled notification fires.
    */
-  onNotificationTick(_cb: () => void): () => void {
-    throw new Error("Engine.onNotificationTick not implemented (Day 6)");
+  onNotificationTick(cb: () => void): () => void {
+    return this.notifications.onTick(cb);
   }
 
   /** Reactive getter for the current notification state. */
-  getNotificationState(): NotificationState {
-    throw new Error("Engine.getNotificationState not implemented (Day 6)");
+  async getNotificationState(): Promise<NotificationState> {
+    const persisted = await this.notifications.getState();
+    return {
+      permission: this.notifications.getPermission(),
+      schedule: persisted.schedule,
+      nextDueAt: persisted.nextDueAt,
+      lastFiredAt: persisted.lastFiredAt,
+    };
   }
 
   // -------------------------------------------------------------------------

@@ -173,20 +173,34 @@ describe("V2.5 Day 1 — architecture scaffold", () => {
 
   it("V2.5 method stubs throw 'not implemented' until later days", async () => {
     const engine = freshEngine();
-    // Day 1: setEntryNote is now implemented (Day 2). We exercise it
-    // end-to-end as a smoke test. The other Day-6 stubs still throw.
+    // Day 1: setEntryNote (Day 2) and the notification surface
+    // (Day 6) are now implemented. Exercise them end-to-end as
+    // a smoke test. The remaining surface (Style — Day 7) is
+    // still exported as types only; the engine itself does not
+    // throw for transitions/filters/themes because those are
+    // pure type-level fields on ExportRequestV2.
     const id = await seedEntryForSanity();
     const updated = await engine.setEntryNote(id, "Day 1 smoke test");
     expect(updated.note).toBe("Day 1 smoke test");
-    await expect(engine.requestNotificationPermission()).rejects.toThrow(
-      /Day 6/,
-    );
-    await expect(engine.scheduleNotifications({} as ScheduleOpts)).rejects.toThrow(
-      /Day 6/,
-    );
-    await expect(engine.cancelNotifications()).rejects.toThrow(/Day 6/);
-    expect(() => engine.onNotificationTick(() => {})).toThrow(/Day 6/);
-    expect(() => engine.getNotificationState()).toThrow(/Day 6/);
+    // Notifications: in jsdom there's no Notification global,
+    // so the request resolves to a false-y "denied" / "unsupported"
+    // result. We don't assert a specific value; we assert it
+    // resolves (no longer throws) and that the schedule call
+    // round-trips.
+    const result = await engine.requestNotificationPermission();
+    expect(typeof result).toBe("boolean");
+    await engine.scheduleNotifications({
+      cadence: "off",
+      lastCaptureAt: null,
+      hour: 9,
+      minute: 0,
+    });
+    const state = await engine.getNotificationState();
+    expect(state.schedule.cadence).toBe("off");
+    const off = engine.onNotificationTick(() => {});
+    expect(typeof off).toBe("function");
+    off();
+    await engine.cancelNotifications();
   });
 
   it("ExportRequestV2 is a superset of ExportRequest (V2.0 stays green)", () => {

@@ -7,12 +7,13 @@
 //   - About / version
 //   - Privacy / ToS links (placeholder)
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
-import { useUnlock } from "../../engine/hooks";
+import { useUnlock, useEngineOrNull } from "../../engine/hooks";
 import type { Cadence } from "../../db/schema";
 import { SUBJECT_TYPES, type SubjectType } from "../../engine/state";
 import { applyWatermark } from "../../engine/export/watermark";
+import type { NotificationCadence, NotificationState } from "../../engine/state";
 
 const APP_VERSION = "2.0.0";
 
@@ -23,9 +24,31 @@ interface Props {
 
 export function V2SettingsScreen({ onBack, onRestore }: Props) {
   const unlock = useUnlock();
+  const engine = useEngineOrNull();
   const [defaultCadence, setDefaultCadence] = useState<Cadence>("daily");
   const [defaultType, setDefaultType] = useState<SubjectType>("baby");
   const [saved, setSaved] = useState(false);
+  // V2.5 — local notifications state. The card is hidden when
+  // the engine isn't ready (e.g. sandbox-only paths) or when the
+  // browser doesn't support the Notification API.
+  const [notificationState, setNotificationState] =
+    useState<NotificationState | null>(null);
+
+  useEffect(() => {
+    if (!engine) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const s = await engine.getNotificationState();
+        if (!cancelled) setNotificationState(s);
+      } catch {
+        /* best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [engine]);
 
   async function handleSave() {
     // V2.0 doesn't persist default cadence/type settings yet;
@@ -33,6 +56,44 @@ export function V2SettingsScreen({ onBack, onRestore }: Props) {
     // saved confirmation.
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function handleEnableNotifications() {
+    if (!engine) return;
+    await engine.requestNotificationPermission();
+    const s = await engine.getNotificationState();
+    setNotificationState(s);
+  }
+
+  async function handleCadenceChange(next: NotificationCadence) {
+    if (!engine || !notificationState) return;
+    await engine.scheduleNotifications({
+      cadence: next,
+      lastCaptureAt: notificationState.lastFiredAt,
+      hour: notificationState.schedule.hour,
+      minute: notificationState.schedule.minute,
+    });
+    const s = await engine.getNotificationState();
+    setNotificationState(s);
+  }
+
+  async function handleTimeChange(hour: number, minute: number) {
+    if (!engine || !notificationState) return;
+    await engine.scheduleNotifications({
+      cadence: notificationState.schedule.cadence,
+      lastCaptureAt: notificationState.lastFiredAt,
+      hour,
+      minute,
+    });
+    const s = await engine.getNotificationState();
+    setNotificationState(s);
+  }
+
+  async function handleCancelNotifications() {
+    if (!engine) return;
+    await engine.cancelNotifications();
+    const s = await engine.getNotificationState();
+    setNotificationState(s);
   }
 
   return (
@@ -114,6 +175,133 @@ export function V2SettingsScreen({ onBack, onRestore }: Props) {
           Restore purchases
         </Button>
       </div>
+
+      {engine ? (
+        <div className="ll-card" data-testid="notifications-card">
+          <h3>Reminders</h3>
+          {notificationState?.permission === "unsupported" ? (
+            <p
+              style={{ color: "var(--ll-text-soft)", fontSize: 13 }}
+              data-testid="notifications-unsupported"
+            >
+              Local notifications aren't supported in this browser. On iOS
+              Safari, install this site to your home screen and re-open it
+              from there to enable reminders.
+            </p>
+          ) : notificationState?.permission === "denied" ? (
+            <p
+              style={{ color: "var(--ll-text-soft)", fontSize: 13 }}
+              data-testid="notifications-denied"
+            >
+              Notifications are blocked. Re-enable them in your browser's
+              site settings.
+            </p>
+          ) : notificationState?.permission === "default" ? (
+            <div className="ll-stack">
+              <p
+                style={{ color: "var(--ll-text-soft)", fontSize: 13, margin: 0 }}
+              >
+                Get a gentle reminder when it's time to capture today's
+                moment. Reminders are local — no data leaves your device.
+              </p>
+              <Button
+                variant="primary"
+                block
+                onClick={handleEnableNotifications}
+                data-testid="notifications-enable"
+              >
+                Enable reminders
+              </Button>
+            </div>
+          ) : (
+            <div className="ll-stack">
+              <p
+                style={{ color: "var(--ll-text-soft)", fontSize: 13, margin: 0 }}
+              >
+                Reminders are on. You can change the cadence or time below,
+                or turn them off at any time.
+              </p>
+              <div className="ll-field">
+                <label>Cadence</label>
+                <div className="ll-radio-row">
+                  {(["off", "daily", "weekly"] as const).map((c) => (
+                    <label
+                      key={c}
+                      className={`ll-radio-card ${
+                        notificationState?.schedule.cadence === c
+                          ? "is-active"
+                          : ""
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="v2-notification-cadence"
+                        checked={notificationState?.schedule.cadence === c}
+                        onChange={() => handleCadenceChange(c)}
+                        data-testid={`notifications-cadence-${c}`}
+                      />
+                      <div className="ll-radio-card-title">
+                        {c === "off" ? "Off" : c === "daily" ? "Daily" : "Weekly"}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {notificationState &&
+              notificationState.schedule.cadence !== "off" ? (
+                <div className="ll-field">
+                  <label>Time of day</label>
+                  <div className="ll-time-row">
+                    <select
+                      value={notificationState.schedule.hour}
+                      onChange={(e) =>
+                        handleTimeChange(
+                          Number(e.target.value),
+                          notificationState.schedule.minute,
+                        )
+                      }
+                      aria-label="Hour"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>
+                          {String(i).padStart(2, "0")}
+                        </option>
+                      ))}
+                    </select>
+                    <span>:</span>
+                    <select
+                      value={notificationState.schedule.minute}
+                      onChange={(e) =>
+                        handleTimeChange(
+                          notificationState.schedule.hour,
+                          Number(e.target.value),
+                        )
+                      }
+                      aria-label="Minute"
+                    >
+                      {Array.from({ length: 60 }, (_, i) => (
+                        <option key={i} value={i}>
+                          {String(i).padStart(2, "0")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {notificationState.nextDueAt ? (
+                    <div className="ll-field-help">
+                      Next reminder: {notificationState.nextDueAt}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {notificationState?.schedule.cadence !== "off" ? (
+                <Button block onClick={handleCancelNotifications}>
+                  Turn off reminders
+                </Button>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <div className="ll-card ll-card-quiet">
         <h3>About</h3>

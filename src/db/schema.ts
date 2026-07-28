@@ -132,3 +132,20 @@ export interface StoredUnlock {
   /** SHA-256 fingerprint of the device that made the purchase. */
   deviceFingerprint: string;
 }
+
+/**
+ * V2.5 — App-level key/value setting. Used for non-per-subject
+ * preferences that don't warrant their own IndexedDB table.
+ * V2.5 ships the notification schedule here; future settings
+ * (default cadence, theme preference, etc.) can reuse the same
+ * table without a schema migration.
+ */
+export interface AppSetting {
+  /** The setting key (e.g. "v25.notifications.v1"). */
+  key: string;
+  /** The setting value. Typed as `unknown`; the consumer
+   *  narrows to the expected shape. */
+  value: unknown;
+  /** ISO datetime of the last write. */
+  updatedAt: string;
+}

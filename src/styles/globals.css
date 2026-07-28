@@ -971,3 +971,19 @@ img {
   font-size: 13px;
   color: var(--ll-fg, inherit);
 }
+
+.ll-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.ll-time-row select {
+  font: inherit;
+  font-size: 14px;
+  padding: 4px 8px;
+  border: 1px solid var(--ll-border, #d1d5db);
+  border-radius: 6px;
+  background: var(--ll-bg, #fff);
+  color: inherit;
+}

@@ -1,5 +1,12 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { Asset, Entry, Project, StoredUnlock, Subject } from "./schema";
+import type {
+  AppSetting,
+  Asset,
+  Entry,
+  Project,
+  StoredUnlock,
+  Subject,
+} from "./schema";
 
 // Single Dexie database for the app.
 //
@@ -13,11 +20,11 @@ import type { Asset, Entry, Project, StoredUnlock, Subject } from "./schema";
 //   - New `unlocks` table holds the IAP receipt store. Empty until
 //     Day 4 wires the IAP provider.
 //
-// The entries index `projectId` is kept (not renamed) so we don't
-// rebuild the compound `[projectId+periodKey]` index in the same
-// migration. V2 code reads `subjectId` via a type alias. The rename
-// to `subjectId` (and a compound `[subjectId+periodKey]` index)
-// happens in V2.5 with a proper version(3) bump.
+// V2.5 schema (version 3): adds `appSettings` (key/value) for
+// app-level settings — V2.5 ships notification schedule
+// persistence here. The table is intentionally generic so future
+// settings (theme preference, last-used cadence) can drop in
+// without further migrations.
 class LittleLoopDB extends Dexie {
   projects!: EntityTable<Project, "id">;
   entries!: EntityTable<Entry, "id">;
@@ -25,6 +32,8 @@ class LittleLoopDB extends Dexie {
   // V2.0 stores
   subjects!: EntityTable<Subject, "id">;
   unlocks!: EntityTable<StoredUnlock, "token">;
+  // V2.5 store
+  appSettings!: EntityTable<AppSetting, "key">;
 
   constructor(name = "little-loop-db") {
     super(name);
@@ -44,6 +53,16 @@ class LittleLoopDB extends Dexie {
       assets: "&id, projectId, type",
       subjects: "&id, name, type, sortIndex",
       unlocks: "&token, platform, product",
+    });
+    // V2.5 schema. Adds appSettings; existing tables are
+    // re-declared verbatim so Dexie doesn't drop their data.
+    this.version(3).stores({
+      projects: "&id",
+      entries: "&id, projectId, [projectId+periodKey], capturedDate",
+      assets: "&id, projectId, type",
+      subjects: "&id, name, type, sortIndex",
+      unlocks: "&token, platform, product",
+      appSettings: "&key",
     });
   }
 }
