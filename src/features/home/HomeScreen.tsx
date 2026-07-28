@@ -118,6 +118,9 @@ export function HomeScreen({ project, kind, navigate, onProjectUpdated }: Props)
               >
                 Replace photo
               </Button>
+              <Button block onClick={() => requestCapture("library")}>
+                Add another photo
+              </Button>
               <Button block onClick={() => navigate({ name: "timeline" })}>
                 View timeline
               </Button>
