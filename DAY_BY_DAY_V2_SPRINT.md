@@ -735,7 +735,7 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 
 **Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 189/189 tests pass. `npm run build` — 214.28 KB main bundle, 66.04 KB gzipped (under 250 KB budget).
 
-#### Day 12 — Backup / restore
+#### Day 12 — Backup / restore ✅ done 2026-07-28
 
 **Morning**
 - Update the V1 `.babyflip` backup to `.babyloop` for V2 writes. Keep V1 read compatibility.
@@ -750,6 +750,17 @@ The plan is 20 working days. The first 3 days are architecture. The next 7 are m
 - Default to merge. Replace requires explicit confirmation.
 
 **End-of-day check**: The user can back up all subjects to a `.babyloop` file. The user can restore from a V1 `.babyflip` or V2 `.babyloop` file. The merge option preserves existing data.
+
+**Day 12 shipped**:
+- `src/features/backup/backup-service.ts` — rewritten to support multi-subject backups. Added `BACKUP_FORMAT_VERSION_V2 = 2` for multi-subject manifests. Added `createAllSubjectsBackup()` that backs up ALL subjects and their entries. Added `restoreFromBackup(file, mode)` that supports `'merge'` (skip existing names) and `'replace'` (wipe + restore). `readBackupFile()` now accepts both V1 (formatVersion 1) and V2 (formatVersion 2) manifests. `BackupEntryManifest` now requires `subjectId` to link entries to subjects. The `BackupManifest.project` field is optional in V2 format (`subjects` array is the primary data). `restoreBackup()` (V1 single-project) is kept as a backwards-compat wrapper.
+- `src/features/settings/SettingsScreen.tsx` — updated `summary.count` → `summary.entryCount` to match the new `RestoredSummary` interface.
+- `tests/integration/v2-multi-backup.test.ts` (new) — 5 tests: multi-subject backup manifest, replace mode, merge preserves existing, merge skips duplicate names, V1 archive compatibility.
+- `tests/unit/backup.test.ts` and `tests/unit/backup-compat.test.ts` — updated to match the new `BackupEntryManifest` shape (added `subjectId` field) and new `RestoredSummary` (`.count` → `.entryCount`).
+
+**Deviations from plan**:
+- The plan calls for a full "Backup" button on the home screen and "Restore" button in Settings with a merge/replace UI. The V1 SettingsScreen already has a Backup/Restore flow (via the V1 backup service). The V2 service layer is ready (all functions exist and are tested), but the V2 App UI (V2BackupScreen, V2RestoreScreen) is not yet built. The V1 SettingsScreen continues to use the V1 `downloadBackup` / `restoreBackup` functions. The V2 UI will be added when V2App replaces App.tsx on Day 14. This is consistent with the Day 7 deviation (V2App swap deferred to Day 14).
+
+**Verification**: `npx tsc --noEmit` clean. `npx eslint .` clean. `npx vitest run` — 194/194 tests pass. `npm run build` — 214.28 KB main bundle, 66.04 KB gzipped (under 250 KB budget).
 
 #### Day 13 — Watermark polish
 

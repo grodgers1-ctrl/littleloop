@@ -104,7 +104,7 @@ export function SettingsScreen({
           file,
           projectName: summary.projectName,
           cadence: summary.cadence,
-          count: summary.count,
+          count: summary.entryCount,
         });
       } catch (err) {
         setRestoreError(

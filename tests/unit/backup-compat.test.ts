@@ -103,6 +103,7 @@ async function buildV1Archive(
     project,
     entries: entries.map(({ entry }) => ({
       id: entry.id,
+      subjectId: entry.projectId,
       periodKey: entry.periodKey,
       capturedDate: entry.capturedDate,
       imagePath: `images/${entry.id}.jpg`,
@@ -144,7 +145,7 @@ describe("V1 .babyflip → V2 restore compatibility", () => {
     const summary = await readBackupFile(file);
     expect(summary.projectName).toBe("Ada");
     expect(summary.cadence).toBe("daily");
-    expect(summary.count).toBe(1);
+    expect(summary.entryCount).toBe(1);
     // The manifest reports the V1 format marker.
     expect(summary.manifest.format).toBe(BACKUP_FORMAT_V1);
   });
@@ -190,7 +191,7 @@ describe("V2 .babyloop write → read roundtrip", () => {
     const summary = await readBackupFile(file);
     expect(summary.manifest.format).toBe(BACKUP_FORMAT);
     expect(summary.projectName).toBe("Ada");
-    expect(summary.count).toBe(1);
+    expect(summary.entryCount).toBe(1);
   });
 
   it("V2 restoreBackup writes a parallel Subject row when the migration runs", async () => {

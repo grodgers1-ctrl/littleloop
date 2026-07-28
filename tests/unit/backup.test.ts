@@ -96,7 +96,8 @@ describe(".babyflip backup + restore", () => {
     ) as BackupManifest;
     expect(manifest.format).toBe(BACKUP_FORMAT);
     expect(manifest.formatVersion).toBe(BACKUP_FORMAT_VERSION);
-    expect(manifest.project.childName).toBe("Ada");
+    // V1 backup always writes the project field.
+    expect(manifest.project!.childName).toBe("Ada");
     expect(manifest.entries.length).toBe(1);
     expect(zip.file(manifest.entries[0].imagePath)).toBeTruthy();
   });
@@ -108,7 +109,7 @@ describe(".babyflip backup + restore", () => {
     const summary = await readBackupFile(file);
     expect(summary.projectName).toBe("Ada");
     expect(summary.cadence).toBe("daily");
-    expect(summary.count).toBe(1);
+    expect(summary.entryCount).toBe(1);
   });
 
   it("rejects backups missing manifest.json", async () => {
