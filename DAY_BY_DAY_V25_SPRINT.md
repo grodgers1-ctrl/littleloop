@@ -323,3 +323,17 @@ The redesign is a 22 KB raw / 6 KB gzipped delta. The engine chunk is unchanged.
 ---
 
 *End of V2.5.1 sprint doc.*
+
+---
+
+## V2.5.1 — closed 2026-07-29
+
+iPhone-verify pass on the redesign passed end to end. The user shared an export from the new home surface and confirmed all flows work.
+
+V2.5 sprint family complete:
+- v2.5.0 (33db2af) — initial 10-day sprint, 270 tests
+- v2.5.1 hotfix (f158d83 / 0755ad2) — V2 home action surface
+- v2.5.1 follow-up (5d38e4b) — live entry count for Export button
+- v2.5.1 redesign (8a14eb0 / a85fd9e) — V2 home surface redesign
+
+Final state: 289 tests, 33 files, 232.7 KB / 70.9 KB gzipped, on main at a85fd9e.
