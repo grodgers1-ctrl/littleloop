@@ -256,3 +256,50 @@ Bugs found outside the V2.5 sprint scope go here. Resolved in V2.6 or later.
 ---
 
 *End of V2.5 sprint doc. Updates at the end of each day.*
+
+---
+
+## V2.5 hotfix follow-up — V2 home action gap
+
+Discovered after the `v2.5.0` tag was shipped and the user verified on iPhone: the V2 home screen (`V2HomeScreen.tsx`) has only "+ Add subject". It does not surface Add Photo, Export, Reminders, or Notes — every one of the features built across V2.0 and V2.5 is reachable only by first creating a subject, tapping it, and discovering nothing in the resulting V1 TimelineScreen. The Capture / Import / Export / Memory lane / Notes / Reminders code paths all exist and work; they're just not wired to a button.
+
+This is a V2.0 completion gap surfaced by the V2.5 verify pass. Per the operating rules, it lives in this "Discovered issues" section rather than being silently rolled into V2.5.
+
+### Phase 1 — Surface the existing features (hotfix)
+
+Branch: `fix/v2-home-actions` (post-`v2.5.0`).
+
+- Add "+ Add photo" + "Export flipbook" buttons to the V2 home subject tile (and in the empty-state CTA row).
+- Add a per-subject action bar to `V2SubjectScreen.tsx` so the user can act on a subject from the timeline (V1 TimelineScreen only has Replace/Delete).
+- Capture / Import / Export / Style screens are already built — no new work there. Re-use the V1 `Route` types from `src/app/routes.ts` and adapt the navigation in `V2SubjectScreen.tsx` to forward capture/import/export routes through the V2 router.
+
+Scope: ~60 lines of wiring + tests. Should land as `v2.5.1`.
+
+### Phase 2 — iPhone verify
+
+Run on real iPhone (user has only iPhone, no Mac Web Inspector):
+
+- Add Photo launches, returns to timeline with the new entry + note affordance
+- Export button opens the V2.5 ExportSheet with the Style section visible
+- Memory lane card renders on the home screen when an entry matches today
+- Notes round-trip through IDB
+- Reminders card surfaces "Enable reminders" on settings
+- No console errors, no broken layouts on small screens
+
+Use `tests/e2e/ios-fix.spec.mjs` and `tests/e2e/full-export-probe.spec.mjs` as templates for what to script vs verify manually.
+
+### Phase 3 — V2 home surface design (deferred, brainstorm)
+
+The hotfix is the minimum that gets the features to the user. The right fix is a V2 home redesign:
+
+- Subject tiles with quick actions (Add photo + Export as primary buttons on the tile)
+- Memory lane card always above the subject list
+- Reminders surface on the home screen (not buried in Settings)
+- Per-subject quick view of the latest entry thumbnail
+- Settings + Paywall reachable from the home header
+
+This is a real product design pass, not a hotfix. Defer to V2.0.x or V2.6 planning.
+
+---
+
+*End of V2.5 sprint doc. Updates at the end of each day.*

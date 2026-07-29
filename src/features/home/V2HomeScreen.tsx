@@ -36,6 +36,14 @@ interface SubjectTileProps {
   subject: Subject;
   onOpen: (id: string) => void;
   onSettings: (id: string) => void;
+  /**
+   * V2.5 hotfix — quick-action callbacks. When provided, the
+   * tile renders Add Photo (primary) + Export flipbook
+   * (secondary) buttons so the user doesn't have to drill
+   * into the subject screen to do anything.
+   */
+  onAddPhoto?: (subjectId: string) => void;
+  onExport?: (subjectId: string) => void;
   /** Disable inline editing (used by tests and the settings screen). */
   readonly?: boolean;
 }
@@ -44,6 +52,8 @@ function SubjectTile({
   subject,
   onOpen,
   onSettings,
+  onAddPhoto,
+  onExport,
   readonly,
 }: SubjectTileProps) {
   const engine = useEngine();
@@ -199,6 +209,38 @@ function SubjectTile({
         </div>
       </button>
       <div className="ll-subject-tile-actions">
+        {/* V2.5 hotfix — quick actions so the user can act on
+            a subject without first tapping into it. The buttons
+            are rendered only when their callbacks are wired
+            (which they are under the V2App shell, but not in
+            the test harness that passes readonly). */}
+        {onAddPhoto || onExport ? (
+          <div className="ll-subject-tile-quick">
+            {onAddPhoto ? (
+              <Button
+                variant="primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddPhoto(subject.id);
+                }}
+                aria-label={`Add a photo to ${subject.name}`}
+              >
+                + Add photo
+              </Button>
+            ) : null}
+            {onExport ? (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExport(subject.id);
+                }}
+                aria-label={`Export ${subject.name} as a flipbook`}
+              >
+                Export
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         {renaming ? (
           <input
             ref={draftInputRef}
@@ -267,9 +309,29 @@ interface Props {
   onSettings?: () => void;
   /** Navigate to a specific entry (timeline view). */
   onOpenEntry?: (subjectId: string, entryId: string) => void;
+  /**
+   * V2.5 hotfix — trigger the library file picker for a
+   * subject, then navigate to the import-date screen.
+   * Wired by V2App to the shared hidden file input.
+   */
+  onAddPhoto?: (subjectId: string) => void;
+  /**
+   * V2.5 hotfix — open the V2 ExportSheet for a subject. The
+   * user can then pick date range + speed + Style and render
+   * the MP4.
+   */
+  onExport?: (subjectId: string) => void;
 }
 
-export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings, onRestore, onSettings, onOpenEntry }: Props) {
+export function V2HomeScreen({
+  onOpenSubject,
+  onOpenSubjectSettings,
+  onRestore,
+  onSettings,
+  onOpenEntry,
+  onAddPhoto,
+  onExport,
+}: Props) {
   const subjects = useSubjects();
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -342,6 +404,8 @@ export function V2HomeScreen({ onOpenSubject, onOpenSubjectSettings, onRestore, 
               subject={subject}
               onOpen={onOpenSubject}
               onSettings={onOpenSubjectSettings}
+              onAddPhoto={onAddPhoto}
+              onExport={onExport}
             />
           ))}
           <AdBanner />
