@@ -1,25 +1,36 @@
-// V2 Home Screen. A vertical list of subject tiles. Each tile shows:
+// V2.5.1 redesign — V2 Home Screen.
 //
-//   - The most recent entry's image as a small thumbnail
-//   - The subject name (tap to rename inline)
-//   - The subject type (tap to cycle through the 8 types)
-//   - The cadence ("daily" / "weekly")
-//   - The entry count
+// Layout (top to bottom):
+//   1. Reminders banner (if notifications are off and the user
+//      hasn't dismissed it). Single line, soft accent. One tap
+//      to settings; X to dismiss for this session.
+//   2. Memory lane — always present. The user asked for a
+//      graceful empty state instead of hidden, so the card
+//      surfaces the feature on day 1 with a "+ Add a moment"
+//      CTA in the empty branch.
+//   3. Subject tiles — vertical list, single column. The
+//      per-tile primary is "+ Add photo" (per the user's
+//      choice: per-tile primary Add photo, not global). The
+//      secondary is "Export". Rename / Type / Settings live
+//      in a less-prominent row below.
+//   4. Bottom CTA — "+ Add a moment" (subject creation).
+//   5. Restore purchases link (free users only).
+//   6. Ad banner (free users only).
 //
-// A "+ Add subject" button at the top opens the AddSubjectSheet. On
-// Day 7 the V1 home screen is replaced by this one in App.tsx; until
-// then this component is wired only by V2App (a separate shell, not
-// the main entry).
+// Copy: "subject" → "moment" / "timeline" where it reads better.
+// The kickoff said the user-visible label for a Subject is
+// "Timeline" but the codebase still uses "subject" in user-
+// facing copy. The V2.5.1 redesign smooths that out.
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/Button";
-import { useEngine, useSubjects } from "../../engine/hooks";
+import { useEngine, useSubjects, useUnlock } from "../../engine/hooks";
 import { getDb } from "../../db/database";
 import { SUBJECT_TYPES } from "../../engine/state";
 import type { Subject, SubjectType } from "../../engine/state";
-import { AddSubjectSheet } from "./AddSubjectSheet";
 import { AdBanner } from "./AdBanner";
 import { MemoryLane } from "../memory-lane/MemoryLane";
+import { RemindersBanner } from "./RemindersBanner";
 
 const TYPE_LABELS: Record<SubjectType, string> = {
   baby: "Baby",
@@ -37,10 +48,9 @@ interface SubjectTileProps {
   onOpen: (id: string) => void;
   onSettings: (id: string) => void;
   /**
-   * V2.5 hotfix — quick-action callbacks. When provided, the
-   * tile renders Add Photo (primary) + Export flipbook
-   * (secondary) buttons so the user doesn't have to drill
-   * into the subject screen to do anything.
+   * V2.5.1 hotfix — quick-action callbacks. The primary action
+   * on the tile is "+ Add photo" (per the user's choice: per-
+   * tile primary, not global). Export is the secondary.
    */
   onAddPhoto?: (subjectId: string) => void;
   onExport?: (subjectId: string) => void;
@@ -209,11 +219,13 @@ function SubjectTile({
         </div>
       </button>
       <div className="ll-subject-tile-actions">
-        {/* V2.5 hotfix — quick actions so the user can act on
-            a subject without first tapping into it. The buttons
-            are rendered only when their callbacks are wired
-            (which they are under the V2App shell, but not in
-            the test harness that passes readonly). */}
+        {/* V2.5.1 redesign — per-tile primary action. The user
+            picked "per-tile primary Add photo" over "global
+            primary" because their primary action loop is
+            "open app → add today's photo to the subject I have
+            in mind." Each subject surfaces its own Add
+            photo CTA; the bottom-of-screen "+ Add a moment"
+            covers the new-subject case. */}
         {onAddPhoto || onExport ? (
           <div className="ll-subject-tile-quick">
             {onAddPhoto ? (
@@ -234,9 +246,9 @@ function SubjectTile({
                   e.stopPropagation();
                   onExport(subject.id);
                 }}
-                aria-label={`Export ${subject.name} as a flipbook`}
+                aria-label={`Export ${subject.name} as a video`}
               >
-                Export
+                Make a video
               </Button>
             ) : null}
           </div>
@@ -261,7 +273,7 @@ function SubjectTile({
               }
             }}
             onClick={(e) => e.stopPropagation()}
-            aria-label="Rename subject"
+            aria-label="Rename timeline"
           />
         ) : (
           <button
@@ -321,6 +333,14 @@ interface Props {
    * the MP4.
    */
   onExport?: (subjectId: string) => void;
+  /**
+   * V2.5.1 redesign — invoked when the user taps the memory
+   * lane empty-state CTA or the "Add a moment" footer button.
+   * On a fresh install (no subjects yet), the home screen
+   * surfaces a single primary CTA; once a subject exists, the
+   * memory lane CTA is the entry point.
+   */
+  onAddMoment?: () => void;
 }
 
 export function V2HomeScreen({
@@ -331,9 +351,17 @@ export function V2HomeScreen({
   onOpenEntry,
   onAddPhoto,
   onExport,
+  onAddMoment,
 }: Props) {
   const subjects = useSubjects();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const unlock = useUnlock();
+
+  // The user picked "settings-only" for reminders in the
+  // previous design round. The V2.5.1 redesign adds a thin
+  // banner above the home content — unobtrusive, dismissible.
+  // The banner lives only when reminders are not configured;
+  // the user can dismiss it for the session.
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // Note: we deliberately do NOT call engine.listSubjects() in a
   // useEffect here. That would create a feedback loop:
@@ -343,41 +371,67 @@ export function V2HomeScreen({
   // mutation (create / rename / reclassify / delete) emits
   // subjects-changed, which keeps the React snapshot in sync.
 
+  // When there's at least one subject, "Add a moment" in the
+  // footer opens the AddSubjectSheet inline. When there are
+  // zero subjects, the home screen surfaces a single primary
+  // CTA ("Start your first timeline") that opens the same
+  // sheet. The sheet itself is owned by V2App so the home
+  // screen stays free of sheet-state plumbing; we just call
+  // the onAddMoment prop which V2App wires to open it.
+  const handleAddMoment = onAddMoment ?? (() => {});
+
   return (
     <div className="ll-content ll-stack-lg">
+      {/* V2.5.1 redesign — thin reminders banner at the top.
+          Hidden when reminders are already on, when the user
+          has dismissed it for this session, or when there's
+          no settings entry (i.e. engine not ready). The user
+          asked for "unobtrusive" so the styling stays flat
+          and the dismiss is a one-tap X. */}
+      {subjects.length > 0 &&
+      !bannerDismissed &&
+      onSettings ? (
+        <RemindersBanner
+          onTap={onSettings}
+          onDismiss={() => setBannerDismissed(true)}
+        />
+      ) : null}
+
       <div className="ll-card">
         <div className="ll-subjects-header">
           <div>
-            <h2 style={{ margin: 0 }}>Your subjects</h2>
+            <h2 style={{ margin: 0 }}>
+              {subjects.length === 0
+                ? "Little Loop"
+                : "Your moments"}
+            </h2>
             <p style={{ color: "var(--ll-text-soft)", margin: "4px 0 0 0" }}>
               {subjects.length === 0
-                ? "Add your first subject to get started."
+                ? "One photo at a time. Watch anything grow."
                 : subjects.length === 1
-                  ? "1 subject"
-                  : `${subjects.length} subjects`}
+                  ? "1 timeline"
+                  : `${subjects.length} timelines`}
             </p>
           </div>
-          <Button variant="primary" onClick={() => setSheetOpen(true)} aria-label="Add subject">
-                      + Add subject
-                    </Button>
-                    {onSettings ? (
-                      <Button variant="ghost" onClick={onSettings}>
-                        Settings
-                      </Button>
-                    ) : null}
+          {onSettings ? (
+            <Button variant="ghost" onClick={onSettings} aria-label="Settings">
+              Settings
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      {/* V2.5 — "On this day" memory lane. Renders nothing when
-          no past-year entries match today. */}
-      {subjects.length > 0 ? (
-        <MemoryLane
-          onOpenEntry={
-            onOpenEntry ??
-            ((subjectId) => onOpenSubject(subjectId))
-          }
-        />
-      ) : null}
+      {/* V2.5.1 — memory lane is always shown, including the
+          empty branch (with a soft "Add a moment" CTA). The
+          user asked for a graceful empty state so the feature
+          is discoverable from day 1. */}
+      <MemoryLane
+        onOpenEntry={
+          onOpenEntry ??
+          ((subjectId) => onOpenSubject(subjectId))
+        }
+        onAddMoment={handleAddMoment}
+      />
 
       {subjects.length === 0 ? (
         <div className="ll-card">
@@ -385,15 +439,12 @@ export function V2HomeScreen({
             One photo at a time. Watch anything grow.
           </p>
           <p>
-            Track a baby, a plant, a fitness cut, a renovation — anything
-            that benefits from "same time, same angle" snapshots.
+            Track a baby, a plant, a fitness cut, a renovation —
+            anything that benefits from "same time, same angle"
+            snapshots.
           </p>
-          <Button
-            variant="primary"
-            block
-            onClick={() => setSheetOpen(true)}
-          >
-            Add your first subject
+          <Button variant="primary" block onClick={handleAddMoment}>
+            Start your first timeline
           </Button>
         </div>
       ) : (
@@ -408,25 +459,33 @@ export function V2HomeScreen({
               onExport={onExport}
             />
           ))}
-          <AdBanner />
-          <button
-            type="button"
-            className="ll-restore-link"
-            onClick={() => onRestore?.()}
+          {/* V2.5.1 redesign — "+ Add a moment" footer CTA. The
+              user's pick: per-tile primary for adding to a
+              specific subject, but they still need a way to
+              create a new timeline. The footer surfaces the
+              create-new path without competing with the
+              per-tile Add photo (which is the primary "do
+              the thing" surface). */}
+          <Button
+            variant="ghost"
+            block
+            onClick={handleAddMoment}
+            aria-label="Add a moment"
           >
-            Restore purchases
-          </button>
+            + Add a moment
+          </Button>
+          <AdBanner />
+          {unlock === "free" ? (
+            <button
+              type="button"
+              className="ll-restore-link"
+              onClick={() => onRestore?.()}
+            >
+              Restore purchases
+            </button>
+          ) : null}
         </div>
       )}
-
-      <AddSubjectSheet
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        onCreated={(id) => {
-          setSheetOpen(false);
-          onOpenSubject(id);
-        }}
-      />
     </div>
   );
 }

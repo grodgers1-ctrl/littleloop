@@ -1,8 +1,14 @@
 // V2.5 — MemoryLane component. Renders the "On this day" card on
 // the home screen, showing up to 3 entries from past years that
-// match today's day-month. The card is hidden when no matches
-// exist (per the kickoff's empty-state guidance: "No memories
-// for today yet — capture one to start your time machine.").
+// match today's day-month.
+//
+// V2.5.1 hotfix — the card now renders in two states:
+//   - matches: the original "1 year ago" / "X years ago" grid
+//   - empty:   a graceful "start your time machine" prompt with
+//              a + Add a moment CTA. The kickoff said "renders
+//              nothing when no matches" but the user asked for
+//              a graceful empty state — the card always surfaces
+//              so the feature is discoverable on day 1.
 
 import { useEffect, useState } from "react";
 import { getDb } from "../../db/database";
@@ -18,12 +24,19 @@ interface MemoryLaneProps {
   max?: number;
   /** Tap handler: open the entry in the timeline view. */
   onOpenEntry: (subjectId: string, entryId: string) => void;
+  /**
+   * V2.5.1 hotfix — invoked when the user taps the empty-state
+   * "Add a moment" CTA. The home screen wires this to its
+   * subject picker / creation flow.
+   */
+  onAddMoment?: () => void;
 }
 
 export function MemoryLane({
   today,
   max = 3,
   onOpenEntry,
+  onAddMoment,
 }: MemoryLaneProps) {
   const resolvedToday = today ?? todayDateOnly();
   const matches = useOnThisDay(resolvedToday, max);
@@ -61,7 +74,30 @@ export function MemoryLane({
   }, [matches]);
 
   if (matches.length === 0) {
-    return null;
+    return (
+      <div
+        className="ll-card ll-memory-lane ll-memory-lane-empty"
+        data-testid="memory-lane-empty"
+      >
+        <div className="ll-memory-lane-header">
+          <h3 className="ll-memory-lane-title">On this day</h3>
+        </div>
+        <p className="ll-memory-lane-empty-body">
+          Capture today's moment and we'll show you the same day
+          in years to come. Your time machine starts here.
+        </p>
+        {onAddMoment ? (
+          <button
+            type="button"
+            className="ll-memory-lane-empty-cta"
+            onClick={onAddMoment}
+            data-testid="memory-lane-empty-cta"
+          >
+            + Add a moment
+          </button>
+        ) : null}
+      </div>
+    );
   }
 
   return (

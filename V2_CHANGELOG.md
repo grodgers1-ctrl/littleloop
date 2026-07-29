@@ -160,3 +160,48 @@ The biggest single change in Little Loop's history. V2.0 transforms the app from
 
 - V2.5: Daily/weekly notifications, onion-skin overlay, auto-crop face, burst capture, transitions/filters/themes, per-entry notes, EXIF date detection, memory lane
 - V2.6: Capacitor shell, IAP validation across all three platforms, App Store/Play Store submission
+## v2.5.1 — 2026-07-29
+
+V2.5.1 fixes a V2.0 home-screen gap and ships the V2 home redesign.
+
+### Fix: V2 home action surface
+
+The V2.5.0 tag shipped with every V2.5 feature built but no way to reach them from the V2 home. The home only had "+ Add subject"; the V2 subject screen thin-wrapped the V1 TimelineScreen but its v1Navigate adapter dropped capture/import/export routes, so the existing Replace button inside the timeline was also broken on the V2 path.
+
+This hotfix:
+- V2App dispatcher renders the V1 `CapturePreviewScreen` and `ImportDateScreen` for the previously-broken `capture-preview` and `import-date` routes (no more "coming soon" placeholder).
+- V2 subject screen forwards capture/import/export routes through the V2 router, fixing the existing Replace button.
+- V2 home subject tile has "+ Add photo" (primary) and "Export" (secondary) quick-action buttons.
+- Hidden camera + library file inputs are lifted into the V2 shell so the V2 home tile can share them.
+- The V2 export-config route reads the live entry count from IDB instead of a hardcoded `0`. The ExportSheet's Export button is gated on `entryCount !== 0`; the V2.0 hardcoded 0 made the button permanently disabled. The follow-up patch fixes this regression by reading the actual count via `db.entries.where("projectId").equals(...)`.
+
+### Redesign: V2 home surface
+
+The V2 home got a small but meaningful redesign:
+- Header: "Your moments" (was "Your subjects"). "1 timeline" / "N timelines" (was "1 subject" / "N subjects"). The kickoff said the user-visible label for a Subject is "Timeline"; the V2.5.1 redesign smooths that out across all user-facing copy.
+- Empty-state CTA: "Start your first timeline" (was "Add your first subject").
+- Per-tile primary action: "+ Add photo" (was: no per-tile action). Per-tile secondary: "Make a video" (was "Export flipbook"). "Export" was a V1-era term; "Make a video" matches the user-facing action.
+- MemoryLane always renders. When there are no past-year entries, the card shows "On this day — capture today's moment and we'll show you the same day in years to come. Your time machine starts here." with a "+ Add a moment" CTA. The V2.5 card was hidden when no matches existed; the redesign surfaces the feature on day 1.
+- A thin reminders banner sits above the home content when notifications are not configured. Single tap → settings, X to dismiss for the session. The V2.5 reminders card was settings-only; the redesign adds a discoverable home entry point.
+- Footer: "+ Add a moment" CTA (was: only accessible from the home header).
+- The AddSubjectSheet is owned by the V2App shell instead of the V2HomeScreen, so the home screen doesn't carry sheet-state plumbing. Both the empty-state CTA and the footer CTA call `onAddMoment` to open the sheet.
+
+### Tests
+
+- **289 tests** (33 test files, up from 32/282 at v2.5.1 hotfix).
+- 7 new redesign tests in `v25-home-redesign.test.tsx` covering: "Your moments" header, "1 timeline" count, "Start your first timeline" empty CTA, memory lane empty state, per-tile "+ Add photo" and "Make a video" buttons, footer "+ Add a moment" CTA.
+- 3 hotfix-routing tests in `v25-hotfix-routing.test.ts` covering the v1→v2 mapping.
+- 3 entry-count tests in `v25-hotfix-export-count.test.ts` pinning the IDB query path.
+
+### Bundle
+
+| | Raw | Gzipped |
+|---|---|---|
+| v2.5.0 baseline | 195.56 KB | 61.20 KB |
+| v2.5.1 hotfix | 208.77 KB | 64.69 KB |
+| v2.5.1 follow-up | 208.77 KB | 64.69 KB |
+| v2.5.1 redesign | 231.01 KB | 70.91 KB |
+| Budget | — | 250 KB |
+| Headroom | — | 179.09 KB |
+
+The redesign adds ~22 KB raw / ~6 KB gzipped for the new copy, the RemindersBanner component, the MemoryLane empty state, and the footer Add-a-moment CTA. The engine chunk is unchanged (2.41 KB → 2.41 KB; the catalogs didn't grow).

@@ -303,3 +303,23 @@ This is a real product design pass, not a hotfix. Defer to V2.0.x or V2.6 planni
 ---
 
 *End of V2.5 sprint doc. Updates at the end of each day.*
+
+---
+
+## V2.5.1 redesign — V2 home surface
+
+The V2.5.1 hotfix made features reachable; the V2.5.1 redesign made the home surface worth reaching. Branch: `feature/v2-home-redesign`. Day-9 design pass decisions:
+
+- Persona: multiple subjects, browsing. Per-tile primary Add photo.
+- Memory lane: home, with graceful empty state (was: hidden when no matches).
+- Reminders: thin home banner, unobtrusive, dismissible.
+- Empty state CTA: "Start your first timeline" (was: "Add your first subject"). User asked for "more cuddly than subject" — copy is now "timeline" / "moment" / "Make a video" rather than "subject" / "Export flipbook".
+- Layout: single-column tile list (no grid, no collapsed strip).
+- Header: "Your moments" title; Settings button on the right; reminders banner above the title.
+- Visual style: keep V1 cream-and-brown palette.
+
+The redesign is a 22 KB raw / 6 KB gzipped delta. The engine chunk is unchanged.
+
+---
+
+*End of V2.5.1 sprint doc.*
