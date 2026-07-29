@@ -81,6 +81,33 @@ function V2Shell() {
     };
   }, [routeSubjectId]);
 
+  // V2.5.1 hotfix — read the live entry count from IDB so the
+  // Export button is enabled when there are photos to export.
+  // The V2.0 dispatcher hardcoded `entryCount = 0`, which made
+  // the ExportSheet's "Export" button permanently disabled
+  // (it gates on `entryCount !== 0`). We only run the query on
+  // the export-config route — every other route gets `null`.
+  const [liveEntryCount, setLiveEntryCount] = useState<number | null>(null);
+  const exportSubjectId =
+    route.name === "export-config" ? route.subjectId : null;
+  useEffect(() => {
+    let cancelled = false;
+    if (exportSubjectId === null) {
+      setLiveEntryCount(null);
+      return;
+    }
+    void (async () => {
+      const all = await getDb()
+        .entries.where("projectId")
+        .equals(exportSubjectId)
+        .toArray();
+      if (!cancelled) setLiveEntryCount(all.length);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [exportSubjectId]);
+
   // Map a V1 Route (used by the V1 TimelineScreen, CapturePreviewScreen,
   // ImportDateScreen) into the V2 router. This is the bridge that
   // makes the V1 components work under the V2 shell without
@@ -208,12 +235,12 @@ function V2Shell() {
   } else if (route.name === "export-config") {
     const subject = currentSubject(route.subjectId);
     const subjectName = subject?.name ?? "subject";
-    // The home screen already shows the entry count on the tile;
-    // the export sheet uses entryCount as a label ("N captured").
-    // For Day 9 we pass 0 (informational); the sheet is still
-    // functional — it exports whatever entries exist in the range.
-    // Day 10 reads the actual count from the engine.
-    const entryCount = 0;
+    // V2.5.1 hotfix — read the live entry count from the
+    // top-level state (queried above). The V2.0 dispatcher
+    // hardcoded `entryCount = 0`, which made the ExportSheet's
+    // "Export" button permanently disabled (it gates on
+    // `entryCount !== 0`).
+    const entryCount = liveEntryCount ?? 0;
     body = (
       <ExportSheet
         open={true}
