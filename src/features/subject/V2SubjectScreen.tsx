@@ -45,16 +45,45 @@ export function V2SubjectScreen({ subject, navigate }: Props) {
 
   // Adapt V2Route → V1 Route for the V1 TimelineScreen. V1's router
   // handles capture, import-date, timeline, export-config,
-  // export-progress, export-complete internally. We only forward
-  // home + settings navigation back up.
+  // export-progress, export-complete internally. V2.5 hotfix —
+  // forward the V1 capture/import/export routes through the V2
+  // router so the Replace / Add buttons inside the V1 timeline
+  // actually work (previously these routes were dropped, breaking
+  // Replace).
   const v1Navigate = (r: import("../../app/routes").Route) => {
     if (r.name === "home") {
       navigate({ name: "home" });
     } else if (r.name === "settings") {
       navigate({ name: "subject-settings", subjectId: subject.id });
+    } else if (r.name === "export-config") {
+      navigate({ name: "export-config", subjectId: subject.id });
+    } else if (r.name === "capture-preview") {
+      navigate({
+        name: "capture-preview",
+        subjectId: subject.id,
+        source: r.source,
+        blob: r.blob,
+        previewUrl: r.previewUrl,
+        suggestedDate: r.suggestedDate,
+        replaceEntryId: r.replaceEntryId,
+      });
+    } else if (r.name === "import-date") {
+      navigate({
+        name: "import-date",
+        subjectId: subject.id,
+        previewUrl: r.previewUrl,
+        suggestedDate: r.suggestedDate,
+        blob: r.blob,
+        replaceEntryId: r.replaceEntryId,
+      });
+    } else if (r.name === "timeline") {
+      // V1's TimelineScreen used a stack-pushed timeline screen.
+      // In V2 the subject IS the timeline; stay put.
+      return;
     }
-    // Other routes remain on the V1 screen until Day 8 wires them
-    // through the engine.
+    // Other V1 routes (intro / setup / export-progress /
+    // export-complete / restore-preview) don't apply under the
+    // V2 shell. The V2App dispatcher bounces them to home.
   };
 
   return (

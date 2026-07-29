@@ -987,3 +987,17 @@ img {
   background: var(--ll-bg, #fff);
   color: inherit;
 }
+
+/* -----------------------------------------------------------------------
+ * V2.5 hotfix — subject tile quick actions
+ * --------------------------------------------------------------------- */
+.ll-subject-tile-quick {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.ll-subject-tile-quick button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
