@@ -19,6 +19,7 @@ import {
 import { V2Splash } from "../engine/V2Splash";
 import { CapturePreviewScreen } from "./capture/CapturePreviewScreen";
 import { ImportDateScreen } from "./capture/ImportDateScreen";
+import { AddSubjectSheet } from "./home/AddSubjectSheet";
 import { getDb } from "../db/database";
 import type { Project } from "../db/schema";
 import type { Route as V1Route } from "../app/routes";
@@ -166,6 +167,14 @@ function V2Shell() {
     [routeSubjectId],
   );
 
+  // V2.5.1 redesign — the V2 home's "+ Add a moment" CTA
+  // opens the AddSubjectSheet inline (without changing the
+  // route). Lifting the sheet's open state to the V2 shell
+  // keeps the home screen free of route-navigation logic
+  // and lets the same sheet serve both the empty-state CTA
+  // and the footer "+ Add a moment" button.
+  const [addSubjectSheetOpen, setAddSubjectSheetOpen] = useState(false);
+
   let body: React.ReactNode = null;
   let headerTitle = "Little Loop";
   let showBack = false;
@@ -199,6 +208,7 @@ function V2Shell() {
             subjectId,
           } satisfies V2Route)
         }
+        onAddMoment={() => setAddSubjectSheetOpen(true)}
       />
     );
     showBack = false;
@@ -353,6 +363,19 @@ function V2Shell() {
         accept="image/*"
         aria-label="Choose photo from camera roll"
         style={{ display: "none" }}
+      />
+      {/* V2.5.1 redesign — the AddSubjectSheet is owned by the
+          V2 shell so the home screen doesn't have to know how
+          to mount a sheet. The `onAddMoment` prop the home
+          screen calls just opens this sheet; on create, we
+          navigate to the new subject's screen. */}
+      <AddSubjectSheet
+        open={addSubjectSheetOpen}
+        onClose={() => setAddSubjectSheetOpen(false)}
+        onCreated={(id) => {
+          setAddSubjectSheetOpen(false);
+          navigate({ name: "subject", subjectId: id } satisfies V2Route);
+        }}
       />
       <footer className="ll-footer">
         Photos stay on this device. No accounts. No uploads.

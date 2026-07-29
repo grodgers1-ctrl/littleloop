@@ -1001,3 +1001,97 @@ img {
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/* -----------------------------------------------------------------------
+ * V2.5.1 redesign — Reminders banner (top-of-home, unobtrusive)
+ * --------------------------------------------------------------------- */
+.ll-reminders-banner {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--ll-fg, inherit);
+}
+.ll-reminders-banner-body {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.ll-reminders-banner-body:hover,
+.ll-reminders-banner-body:focus-visible {
+  background: rgba(217, 119, 6, 0.12);
+  outline: none;
+}
+.ll-reminders-banner-icon {
+  font-size: 16px;
+  line-height: 1;
+  color: rgba(217, 119, 6, 1);
+}
+.ll-reminders-banner-text {
+  flex: 1 1 auto;
+}
+.ll-reminders-banner-dismiss {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid rgba(217, 119, 6, 0.25);
+  padding: 0 14px;
+  cursor: pointer;
+  color: var(--ll-muted, #6b7280);
+  font-size: 18px;
+  line-height: 1;
+}
+.ll-reminders-banner-dismiss:hover,
+.ll-reminders-banner-dismiss:focus-visible {
+  background: rgba(217, 119, 6, 0.12);
+  color: var(--ll-fg, inherit);
+  outline: none;
+}
+
+/* -----------------------------------------------------------------------
+ * V2.5.1 redesign — MemoryLane empty state
+ * --------------------------------------------------------------------- */
+.ll-memory-lane-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ll-memory-lane-empty-body {
+  margin: 0;
+  color: var(--ll-muted, #6b7280);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.ll-memory-lane-empty-cta {
+  align-self: flex-start;
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--ll-accent, #3a2e25);
+  color: var(--ll-accent, #3a2e25);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ll-memory-lane-empty-cta:hover,
+.ll-memory-lane-empty-cta:focus-visible {
+  background: var(--ll-accent, #3a2e25);
+  color: #fff;
+  outline: none;
+}

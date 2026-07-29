@@ -94,8 +94,9 @@ describe("V2HomeScreen — Day 6 polish", () => {
       </V2Splash>,
     );
     // The empty-state body button is the unambiguous target.
+    // V2.5.1 redesign — copy is "Start your first timeline".
     const button = await screen.findByRole("button", {
-      name: /Add your first subject/i,
+      name: /Start your first timeline/i,
     });
     expect(button).toBeInTheDocument();
   });
