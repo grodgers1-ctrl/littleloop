@@ -62,8 +62,8 @@
 | IAP products | `com.littleloop.clean` (£1.99) + `com.littleloop.studio` (£4.99), Non-Consumable | ⬜ |
 | Sandbox testing | TestFlight build + sandbox Apple ID purchase walk | ⬜ |
 | Screenshots | 6.7" iPhone set (min 3); capture from the polished UI walk | ⬜ |
-| Support URL | `https://little-loop.app` (domain claimed ✅ — needs the site deployed) | ⬜ |
-| Privacy policy URL | `https://little-loop.app/privacy.html` once deployed | ⬜ |
+| Support URL | ✅ **Live** — `https://little-loop.app` (deployed 15 Oct 2026, PR #1) | ✅ |
+| Privacy policy URL | ✅ **Live** — `https://little-loop.app/privacy.html` (verified 200) | ✅ |
 | Age rating | Questionnaire — expect 4+ (no user content, no collection) | ⬜ |
 | Export compliance | Standard encryption only (HTTPS) → answer "exempt" | ⬜ |
 | Review notes | Draft below | ⬜ |
