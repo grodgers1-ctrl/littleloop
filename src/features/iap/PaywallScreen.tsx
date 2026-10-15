@@ -46,16 +46,15 @@ const PRODUCTS: ProductInfo[] = [
     title: "Studio",
     price: "£4.99",
     blurb:
-      "Everything in Clean exports, plus the Style section in the export sheet (transitions, filters, themes) when V2.5 lands.",
+      "Everything in Clean exports, plus the Style section in the export sheet: transitions, filters, and themes.",
     unlocks: [
       "Everything in Clean exports",
       "Transitions, filters, and themes in the export sheet",
-      "Auto-crop face and burst capture (V2.5)",
     ],
   },
 ];
 
-export function PaywallScreen({ onClose, source }: Props) {
+export function PaywallScreen({ onClose }: Props) {
   const engine = useEngine();
   const currentUnlock = useUnlock();
   const [busy, setBusy] = useState<IapProduct | null>(null);
@@ -106,7 +105,8 @@ export function PaywallScreen({ onClose, source }: Props) {
 
   return (
     <div className="ll-content ll-stack-lg">
-      <h2>Unlock Little Loop</h2>
+      {/* The app header already shows "Unlock Little Loop"; no
+          duplicate heading here. */}
       <p style={{ color: "var(--ll-text-soft)" }}>
         One-time unlocks. No subscription. No trials. No nag.
       </p>
@@ -114,11 +114,9 @@ export function PaywallScreen({ onClose, source }: Props) {
       {!isAvailable ? (
         <div className="ll-card">
           <p>
-            In-app purchases are not available in this build yet. The
-            paywall ships behind a feature flag until V2.5.
-          </p>
-          <p style={{ color: "var(--ll-text-soft)" }}>
-            Source: {source === "home" ? "home screen" : "export sheet"}
+            Purchases aren't enabled in this build yet. They're rolling out
+            with the next release — your timelines and exports work exactly
+            the same in the meantime.
           </p>
         </div>
       ) : (
@@ -188,8 +186,10 @@ export function PaywallScreen({ onClose, source }: Props) {
             fontSize: 13,
           }}
         >
-          Already bought on another device? Sign in to your account on
-          this device and tap Restore purchases to re-apply the unlock.
+          Bought Little Loop on another device? Your unlock is tied to your
+          app store account — use the same account on this device, then tap
+          Restore purchases to re-apply it. Little Loop itself has no
+          accounts and stores nothing in the cloud.
         </p>
       </div>
 

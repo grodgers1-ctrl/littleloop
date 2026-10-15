@@ -14,8 +14,26 @@ import type { Cadence } from "../../db/schema";
 import { SUBJECT_TYPES, type SubjectType } from "../../engine/state";
 import { applyWatermark } from "../../engine/export/watermark";
 import type { NotificationCadence, NotificationState } from "../../engine/state";
+import { loadSubjectDefaults, saveSubjectDefaults } from "../../lib/defaults";
 
-const APP_VERSION = "2.0.0";
+const APP_VERSION = "2.5.1";
+
+const TYPE_LABELS: Record<SubjectType, string> = {
+  baby: "Baby",
+  plant: "Plant",
+  fitness: "Fitness",
+  recovery: "Recovery",
+  home: "Home",
+  creative: "Creative",
+  pet: "Pet",
+  other: "Other",
+};
+
+/** App-store polish — static pages shipped in `public/`. */
+const PRIVACY_URL = "privacy.html";
+const TERMS_URL = "terms.html";
+/** Support channel — mailbox on the claimed little-loop.app domain. */
+const SUPPORT_EMAIL = "support@little-loop.app";
 
 interface Props {
   onBack: () => void;
@@ -28,6 +46,14 @@ export function V2SettingsScreen({ onBack, onRestore }: Props) {
   const [defaultCadence, setDefaultCadence] = useState<Cadence>("daily");
   const [defaultType, setDefaultType] = useState<SubjectType>("baby");
   const [saved, setSaved] = useState(false);
+
+  // App-store polish — seed the Defaults form from the persisted
+  // values so the screen reflects reality on open.
+  useEffect(() => {
+    const d = loadSubjectDefaults();
+    setDefaultCadence(d.cadence);
+    setDefaultType(d.type);
+  }, []);
   // V2.5 — local notifications state. The card is hidden when
   // the engine isn't ready (e.g. sandbox-only paths) or when the
   // browser doesn't support the Notification API.
@@ -51,9 +77,9 @@ export function V2SettingsScreen({ onBack, onRestore }: Props) {
   }, [engine]);
 
   async function handleSave() {
-    // V2.0 doesn't persist default cadence/type settings yet;
-    // this is a placeholder for V2.5. For now we just show the
-    // saved confirmation.
+    // App-store polish — the button now actually persists. Values
+    // are read by the AddSubjectSheet when it seeds a new subject.
+    saveSubjectDefaults({ cadence: defaultCadence, type: defaultType });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -142,7 +168,7 @@ export function V2SettingsScreen({ onBack, onRestore }: Props) {
                 className={`ll-type-tile ${defaultType === t ? "is-active" : ""}`}
                 onClick={() => setDefaultType(t)}
               >
-                <div className="ll-type-tile-title">{t}</div>
+                <div className="ll-type-tile-title">{TYPE_LABELS[t]}</div>
               </button>
             ))}
           </div>
@@ -312,13 +338,18 @@ export function V2SettingsScreen({ onBack, onRestore }: Props) {
           One photo at a time. Watch anything grow.
         </p>
         <div className="ll-stack">
-          <Button block onClick={() => window?.open?.("about:blank", "_blank")}>
+          <Button block onClick={() => window.open(PRIVACY_URL, "_blank")}>
             Privacy policy
           </Button>
-          <Button block onClick={() => window?.open?.("about:blank", "_blank")}>
+          <Button block onClick={() => window.open(TERMS_URL, "_blank")}>
             Terms of service
           </Button>
-          <Button block onClick={() => window?.open?.("about:blank", "_blank")}>
+          <Button
+            block
+            onClick={() =>
+              window.open(`mailto:${SUPPORT_EMAIL}`, "_self")
+            }
+          >
             Send feedback
           </Button>
           <Button block onClick={onBack}>

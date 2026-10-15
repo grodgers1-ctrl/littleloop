@@ -17,9 +17,15 @@ import type { V2Route } from "../../engine/router";
 interface Props {
   subject: Subject;
   navigate: (r: V2Route) => void;
+  /**
+   * App-store polish — wired by the V2 shell to the shared library
+   * file picker so the timeline empty state can offer "Add your
+   * first photo" instead of dead-ending.
+   */
+  onAddPhoto?: () => void;
 }
 
-export function V2SubjectScreen({ subject, navigate }: Props) {
+export function V2SubjectScreen({ subject, navigate, onAddPhoto }: Props) {
   const [project, setProject] = useState<Project | null>(null);
 
   useEffect(() => {
@@ -91,6 +97,7 @@ export function V2SubjectScreen({ subject, navigate }: Props) {
       project={project}
       kind="real"
       navigate={v1Navigate}
+      onAddPhoto={onAddPhoto}
     />
   );
 }
