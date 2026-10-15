@@ -180,12 +180,17 @@ function V2Shell() {
   let showBack = false;
 
   if (route.name === "home") {
+    // App-store polish — the home screen's Settings entry and the
+    // reminders banner both gate on the onSettings prop; without it
+    // the app-wide settings screen (notifications, defaults,
+    // privacy/terms) was unreachable in the V2 shell.
     body = (
       <V2HomeScreen
         onOpenSubject={(id) => navigate({ name: "subject", subjectId: id })}
         onOpenSubjectSettings={(id) =>
           navigate({ name: "subject-settings", subjectId: id })
         }
+        onSettings={() => navigate({ name: "settings" } satisfies V2Route)}
         onRestore={() =>
           navigate({ name: "paywall", source: "home" } satisfies V2Route)
         }
@@ -215,7 +220,22 @@ function V2Shell() {
   } else if (route.name === "subject") {
     const subject = currentSubject(route.subjectId);
     if (subject) {
-      body = <V2SubjectScreen subject={subject} navigate={navigate} />;
+      body = (
+        <V2SubjectScreen
+          subject={subject}
+          navigate={navigate}
+          onAddPhoto={() =>
+            triggerFilePicker(
+              route.subjectId,
+              "library",
+              navigate,
+              currentSubject,
+              subjectProject,
+              setSubjectProject,
+            )
+          }
+        />
+      );
       headerTitle = subject.name;
       showBack = true;
     }

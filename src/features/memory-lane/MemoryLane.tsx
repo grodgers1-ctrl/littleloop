@@ -86,14 +86,19 @@ export function MemoryLane({
           Capture today's moment and we'll show you the same day
           in years to come. Your time machine starts here.
         </p>
-        {onAddMoment ? (
+        {/* App-store polish — the CTA opens the subject sheet, so the
+            label says what it actually does. When there are no
+            timelines yet, the intro card directly below already
+            carries the "Start your first timeline" primary, so the
+            lane stays copy-only to avoid two identical CTAs. */}
+        {onAddMoment && subjects.length > 0 ? (
           <button
             type="button"
             className="ll-memory-lane-empty-cta"
             onClick={onAddMoment}
             data-testid="memory-lane-empty-cta"
           >
-            + Add a moment
+            + Add another timeline
           </button>
         ) : null}
       </div>

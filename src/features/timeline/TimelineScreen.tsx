@@ -23,9 +23,17 @@ interface Props {
   project: Project;
   kind: "real" | "sandbox";
   navigate: (r: Route) => void;
+  /**
+   * App-store polish — invoked from the empty state so a first-time
+   * user can add a photo without bouncing back to the home tile.
+   * Wired by the V2 shell to the shared library file picker. When
+   * omitted (sandbox / legacy mounts) the empty state renders no
+   * CTA, as before.
+   */
+  onAddPhoto?: () => void;
 }
 
-export function TimelineScreen({ project, kind, navigate }: Props) {
+export function TimelineScreen({ project, kind, navigate, onAddPhoto }: Props) {
   // `kind` is consumed in Phase 4 (timeline-specific sandbox badges).
   void kind;
   const engine = useEngineOrNull();
@@ -126,6 +134,13 @@ export function TimelineScreen({ project, kind, navigate }: Props) {
         <EmptyState
           title="Your first moment starts here."
           description="Take a photo or choose one from your camera roll."
+          action={
+            onAddPhoto ? (
+              <Button variant="primary" onClick={onAddPhoto}>
+                Add your first photo
+              </Button>
+            ) : undefined
+          }
         />
       </div>
     );

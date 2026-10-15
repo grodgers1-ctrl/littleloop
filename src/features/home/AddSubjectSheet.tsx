@@ -15,6 +15,7 @@ import { Modal } from "../../components/Modal";
 import { useEngine } from "../../engine/hooks";
 import { SUBJECT_TYPES, type SubjectType } from "../../engine/state";
 import type { Cadence } from "../../db/schema";
+import { loadSubjectDefaults } from "../../lib/defaults";
 
 interface Props {
   open: boolean;
@@ -48,15 +49,22 @@ const TYPE_HINTS: Record<SubjectType, string> = {
 export function AddSubjectSheet({ open, onClose, onCreated }: Props) {
   const engine = useEngine();
   const [name, setName] = useState("");
-  const [type, setType] = useState<SubjectType>("baby");
-  const [cadence, setCadence] = useState<Cadence>("daily");
+  // App-store polish — seed the form from the persisted defaults the
+  // user picked in Settings (falls back to baby / daily).
+  const [type, setType] = useState<SubjectType>(
+    () => loadSubjectDefaults().type,
+  );
+  const [cadence, setCadence] = useState<Cadence>(
+    () => loadSubjectDefaults().cadence,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function reset() {
     setName("");
-    setType("baby");
-    setCadence("daily");
+    const d = loadSubjectDefaults();
+    setType(d.type);
+    setCadence(d.cadence);
     setError(null);
   }
 
@@ -121,6 +129,7 @@ export function AddSubjectSheet({ open, onClose, onCreated }: Props) {
                 type="button"
                 role="radio"
                 aria-checked={type === t}
+                aria-label={`${TYPE_LABELS[t]} — ${TYPE_HINTS[t]}`}
                 className={`ll-type-tile ${type === t ? "is-active" : ""}`}
                 onClick={() => setType(t)}
               >

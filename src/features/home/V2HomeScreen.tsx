@@ -400,11 +400,12 @@ export function V2HomeScreen({
       <div className="ll-card">
         <div className="ll-subjects-header">
           <div>
-            <h2 style={{ margin: 0 }}>
-              {subjects.length === 0
-                ? "Little Loop"
-                : "Your moments"}
-            </h2>
+            {/* App-store polish — the app header already shows
+                "Little Loop", so the empty branch repeats it here.
+                Show the heading only once there are timelines. */}
+            {subjects.length === 0 ? null : (
+              <h2 style={{ margin: 0 }}>Your moments</h2>
+            )}
             <p style={{ color: "var(--ll-text-soft)", margin: "4px 0 0 0" }}>
               {subjects.length === 0
                 ? "One photo at a time. Watch anything grow."
@@ -435,9 +436,6 @@ export function V2HomeScreen({
 
       {subjects.length === 0 ? (
         <div className="ll-card">
-          <p style={{ color: "var(--ll-text-soft)" }}>
-            One photo at a time. Watch anything grow.
-          </p>
           <p>
             Track a baby, a plant, a fitness cut, a renovation —
             anything that benefits from "same time, same angle"
